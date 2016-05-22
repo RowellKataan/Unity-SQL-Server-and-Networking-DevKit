@@ -1,0 +1,54 @@
+-- --------------------------------------------------------------------------------------
+-- INSTRUCTIONS TO CREATE YOUR DATABASE
+-- STEP 1: INSTALL Microsoft SQL Server Express AND SQL Server Management Studio.
+--         (Download for Free: https://www.microsoft.com/en-us/server-cloud/products/sql-server-editions/sql-server-express.aspx)
+--
+-- STEP 2: OPEN SQL Server Management Studio  
+-- STEP 3: CREATE A NEW DATABASE CALLED "SQLTEST".
+-- STEP 4: RUN THIS SQL QUERY TO SET UP YOUR SQL USER, TEST TABLE AND DATA.
+-- --------------------------------------------------------------------------------------
+
+
+/****** Object:  User [SQLUSER]    Script Date: 3/18/2016 10:10:08 PM ******/
+USE [master]
+GO
+CREATE LOGIN [SQLUSER] WITH PASSWORD=N'Password1', DEFAULT_DATABASE=[SQLTEST], DEFAULT_LANGUAGE=[us_english], CHECK_EXPIRATION=OFF, CHECK_POLICY=OFF
+GO
+USE [SQLTEST]
+GO
+CREATE USER [SQLUSER] FOR LOGIN [SQLUSER] WITH DEFAULT_SCHEMA=[dbo]
+GO
+EXEC sp_addrolemember N'db_datawriter', N'SQLUSER'
+GO
+GRANT CONNECT, SELECT, INSERT, UPDATE, DELETE, EXECUTE TO SQLUSER;
+GO
+/****** Object:  Table [dbo].[tblTest]    Script Date: 3/18/2016 10:10:08 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[tblTest](
+	[ID] [int] NOT NULL,
+	[Username] [varchar](30) NOT NULL,
+ CONSTRAINT [PK_tblTest] PRIMARY KEY CLUSTERED 
+(
+	[ID] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+ALTER TABLE [dbo].[tblTest] ADD  CONSTRAINT [DF_tblTest_Username]  DEFAULT ('') FOR [Username]
+GO
+USE [master]
+GO
+ALTER DATABASE [SQLTEST] SET  READ_WRITE 
+GO
+USE [SQLTEST]
+GO
+INSERT INTO tblTest (ID, Username) VALUES (1, 'Test User 1');
+INSERT INTO tblTest (ID, Username) VALUES (2, 'Test User 2');
+INSERT INTO tblTest (ID, Username) VALUES (3, 'Test User 3');

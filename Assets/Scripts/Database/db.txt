@@ -1,0 +1,8 @@
+// THIS IS A SAMPLE OF AN OVERRIDE TEXT 
+// FILE TO DETERMINE THE SQL SERVER TO CONNECT TO
+
+server=localhost\sqlexpress
+database=SQLTEST
+username=SQLUSER
+password=Password1
+
