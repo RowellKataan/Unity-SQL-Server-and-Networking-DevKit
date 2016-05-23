@@ -303,9 +303,10 @@ namespace CBT
 
 		#region "PRIVATE/PROTECTED CONSTANTS"
 
-			protected static	string		SCRIPT_DIRECTORY				= "Class Scripts";										// WHERE THE CREATED SCRIPT FILES ARE WRITTEN
-			protected	static	string		DATABASE_FILE_DIRECTORY	= @"Scripts/ClassBuilder/Database";		// WHERE THE UNITY DATABASE FILE IS STORED FOR THE CLASSES WE CREATE
-			protected	static	string		DATABASE_FILE_NAME			= @"ClassScriptDatabase.asset";				// THE NAME OF THE DATABASE FILE FOR THE CLASSES WE CREATE
+			protected	static	string		APP_ROOT_DIRECTORY			= "SQL-Server-Networking-DevKit/";
+			protected static	string		SCRIPT_DIRECTORY				= APP_ROOT_DIRECTORY + "Class Scripts/";									// WHERE THE CREATED SCRIPT FILES ARE WRITTEN
+			protected	static	string		DATABASE_FILE_DIRECTORY	= APP_ROOT_DIRECTORY + "Scripts/ClassBuilder/Database";		// WHERE THE UNITY DATABASE FILE IS STORED FOR THE CLASSES WE CREATE
+			protected	static	string		DATABASE_FILE_NAME			= "ClassScriptDatabase.asset";														// THE NAME OF THE DATABASE FILE FOR THE CLASSES WE CREATE
 
 		#endregion
 
@@ -353,7 +354,7 @@ namespace CBT
 			{
 				get
 				{
-					return "Class Scripts/" + Name + " Class Scripts";
+					return SCRIPT_DIRECTORY + Name + " Class Scripts";
 				}
 			}
 			private	string			GetPropertyType(ClassProperty prop, bool blnIncludeSrc = false)

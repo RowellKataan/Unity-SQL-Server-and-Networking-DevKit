@@ -22,7 +22,8 @@ namespace CBT
 
 			protected const		int				MINIMUM_WIDTH						= 270;
 			protected const		int				MINIMUM_HEIGHT					= 300;
-			protected	const		string		DATABASE_FILE_DIRECTORY	= @"Scripts/ClassBuilder/Database";
+			protected	const		string		APP_ROOT_DIRECTORY			= "SQL-Server-Networking-DevKit/";
+			protected	const		string		DATABASE_FILE_DIRECTORY	= APP_ROOT_DIRECTORY + "Scripts/ClassBuilder/Database";
 			protected					string		DATABASE_FILE_NAME			= @"XXX.asset";
 
 		#endregion

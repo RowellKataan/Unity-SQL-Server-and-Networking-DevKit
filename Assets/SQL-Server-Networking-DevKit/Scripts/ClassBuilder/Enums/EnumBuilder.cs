@@ -58,8 +58,9 @@ namespace CBT
 
 		#region "PRIVATE/PROTECTED CONSTANTS"
 
-			protected	static	string		DATABASE_FILE_DIRECTORY	= @"Scripts/ClassBuilder/Database";		// WHERE THE UNITY DATABASE FILE IS STORED FOR THE ENUMS WE CREATE
-			protected	static	string		DATABASE_FILE_NAME			= @"EnumDatabase.asset";							// THE NAME OF THE DATABASE FILE FOR THE ENUMS WE CREATE
+			protected	static	string		APP_ROOT_DIRECTORY			= "SQL-Server-Networking-DevKit/";
+			protected	static	string		DATABASE_FILE_DIRECTORY	= APP_ROOT_DIRECTORY + "Scripts/ClassBuilder/Database";		// WHERE THE UNITY DATABASE FILE IS STORED FOR THE ENUMS WE CREATE
+			protected	static	string		DATABASE_FILE_NAME			= "EnumDatabase.asset";																		// THE NAME OF THE DATABASE FILE FOR THE ENUMS WE CREATE
 
 		#endregion
 
