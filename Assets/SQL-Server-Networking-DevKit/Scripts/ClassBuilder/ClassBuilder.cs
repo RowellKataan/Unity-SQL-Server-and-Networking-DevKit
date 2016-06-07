@@ -4,7 +4,10 @@
 //        Author: Michael Marzilli   ( http://www.linkedin.com/in/michaelmarzilli )
 //       Created: Mar 26, 2016
 //	
-// VERS 1.0.000 : Mar 26, 2016 : Original File Created. Released for Unity 3D.
+// VERS 1.0.000 : Mar 26, 2016 :	Original File Created. Released for Unity 3D.
+//			1.0.002 : Jun 07, 2016 :	Added SQL entity Naming Convention (int constant).
+//																Resolved bug in the Class C# creator, Public Search Section. Misplaced closing } came before the ELSE statement.
+//																Resolved bug in the utility class, which was pointing to the wrong directory for FileExists check.
 //
 // ===========================================================================================================
 
@@ -307,6 +310,8 @@ namespace CBT
 			protected static	string		SCRIPT_DIRECTORY				= APP_ROOT_DIRECTORY + "Class Scripts/";									// WHERE THE CREATED SCRIPT FILES ARE WRITTEN
 			protected	static	string		DATABASE_FILE_DIRECTORY	= APP_ROOT_DIRECTORY + "Scripts/ClassBuilder/Database";		// WHERE THE UNITY DATABASE FILE IS STORED FOR THE CLASSES WE CREATE
 			protected	static	string		DATABASE_FILE_NAME			= "ClassScriptDatabase.asset";														// THE NAME OF THE DATABASE FILE FOR THE CLASSES WE CREATE
+
+			protected	static	int				SQL_NAMING_CONVENTION		= 1;			// 1=Prefix for type (tbl, sp, etc).  2=Caps on Class Name, followed by function.
 
 		#endregion
 
@@ -617,15 +622,46 @@ namespace CBT
 
 		#region "PRIVATE FUNCTIONS"
 
+			// SQL NAMING CONVENTION
+			private string			GetTableName
+			{
+				get
+				{
+					switch (SQL_NAMING_CONVENTION)
+					{
+						case 1:
+							return "tbl" + this.ClassName;
+						case 2:
+							return this.ClassName.ToUpper();
+						default:
+							return "tbl" + this.ClassName;
+					}
+				}
+			}
+			private string			GetStoredProcedureName
+			{
+				get
+				{
+					switch (SQL_NAMING_CONVENTION)
+					{
+						case 1: 
+							return "sp" + this.ClassName;
+						case 2:
+							return this.ClassName.ToUpper() + "_";
+						default:
+							return "sp" + this.ClassName;
+					}
+				}
+			}
+
 			// SQL BUILDING SUB-FUNCTIONS
 			private string			DropConstraint(string strVar)
 			{
 				string strSQL		= "";
-				string strTable	= "tbl" + this.ClassName;
 
-				strSQL += "IF  EXISTS (SELECT * FROM dbo.sysobjects WHERE id = OBJECT_ID(N'[DF_" + strTable + "_" + strVar + "]') AND type = 'D')\n";
+				strSQL += "IF  EXISTS (SELECT * FROM dbo.sysobjects WHERE id = OBJECT_ID(N'[DF_" + GetTableName + "_" + strVar + "]') AND type = 'D')\n";
 				strSQL += "BEGIN\n";
-				strSQL += "ALTER TABLE [dbo].[" + strTable + "] DROP CONSTRAINT [DF_" + strTable + "_" + strVar + "]\n";
+				strSQL += "ALTER TABLE [dbo].[" + GetTableName + "] DROP CONSTRAINT [DF_" + GetTableName + "_" + strVar + "]\n";
 				strSQL += "END\nGO\n\n";
 
 				return strSQL;
@@ -634,7 +670,7 @@ namespace CBT
 			{
 				string strSQL = "";
 
-				strSQL += "ALTER TABLE [dbo].[tbl" + this.ClassName + "] ADD CONSTRAINT [DF_tbl" + this.ClassName + "_" + prop.Name + "] DEFAULT ";
+				strSQL += "ALTER TABLE [dbo].[" + GetTableName + "] ADD CONSTRAINT [DF_" + GetTableName + "_" + prop.Name + "] DEFAULT ";
 				if (prop.VarType.ToLower().StartsWith("enum"))
 					strSQL += "0";
 				else
@@ -682,26 +718,26 @@ namespace CBT
 			}
 			private void				BuildDropStoredProcedures()
 			{
-				_strFileData += "IF  EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[spGet" + this.ClassName + "ByID]') AND type in (N'P', N'PC'))\n";
-				_strFileData += "DROP PROCEDURE [dbo].[spGet" + this.ClassName + "ByID];\n";
+				_strFileData += "IF  EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[" + GetStoredProcedureName + "GetByID]') AND type in (N'P', N'PC'))\n";
+				_strFileData += "DROP PROCEDURE [dbo].[" + GetStoredProcedureName + "GetByID];\n";
 				_strFileData += "GO\n\n";
-				_strFileData += "IF  EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[spUpdate" + this.ClassName + "]') AND type in (N'P', N'PC'))\n";
-				_strFileData += "DROP PROCEDURE [dbo].[spUpdate" + this.ClassName + "];\n";
+				_strFileData += "IF  EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[" + GetStoredProcedureName + "Update]') AND type in (N'P', N'PC'))\n";
+				_strFileData += "DROP PROCEDURE [dbo].[" + GetStoredProcedureName + "Update];\n";
 				_strFileData += "GO\n\n";
 				for (int i = 0; i < Variables.Count; i++)
 				{
 					if (Variables[i].IsSearchable)
-					{ 
-						_strFileData += "IF  EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[spGet" + this.ClassName + "By" + Variables[i].Name + "]') AND type in (N'P', N'PC'))\n";
-						_strFileData += "DROP PROCEDURE [dbo].[spGet" + this.ClassName + "By" + Variables[i].Name + "];\n";
+					{
+						_strFileData += "IF  EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[" + GetStoredProcedureName + "GetBy" + Variables[i].Name + "]') AND type in (N'P', N'PC'))\n";
+						_strFileData += "DROP PROCEDURE [dbo].[" + GetStoredProcedureName + "GetBy" + Variables[i].Name + "];\n";
 						_strFileData += "GO\n\n";
 					}
 				}
 			}
 			private void				BuildDropTable()
 			{
-				_strFileData += "IF  EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[tbl" + this.ClassName + "]') AND type in (N'U'))\n";
-				_strFileData += "DROP TABLE [dbo].[tbl" + this.ClassName + "]\n";
+				_strFileData += "IF  EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[" + GetTableName + "]') AND type in (N'U'))\n";
+				_strFileData += "DROP TABLE [dbo].[" + GetTableName + "]\n";
 				_strFileData += "GO\n\n";
 			}
 			private void				BuildCreateTable()
@@ -712,7 +748,7 @@ namespace CBT
 				_strFileData += "GO\n\n";
 				_strFileData += "SET ANSI_PADDING ON\n";
 				_strFileData += "GO\n\n";
-				_strFileData += "CREATE TABLE [dbo].[tbl" + this.ClassName + "](\n";
+				_strFileData += "CREATE TABLE [dbo].[" + GetTableName + "](\n";
 				for (int i = 0; i < Variables.Count; i++)
 				{
 					if (!Variables[i].IsDeleted)
@@ -756,21 +792,21 @@ namespace CBT
 					_strFileData += "GO\n\n";
 //				_strFileData += "-- =============================================\n";
 //				_strFileData += "-- Create date: " + System.DateTime.Now.ToString("MMM dd yyyy - hh:mm:ss tt") + "\n";
-//				_strFileData += "-- Description: spGet" + this.ClassName + "ByID\n";
+//				_strFileData += "-- Description: " + GetStoredProcedureName + "GetByID\n";
 //				_strFileData += "-- =============================================\n";
-					_strFileData += "CREATE PROCEDURE [dbo].[spGet" + this.ClassName + "ByID] (\n";
+					_strFileData += "CREATE PROCEDURE [dbo].[" + GetStoredProcedureName + "GetByID] (\n";
  					_strFileData += "	@ID					INT = 0,\n";
 					_strFileData += "	@ACTIVEONLY	BIT = FALSE\n";
 					_strFileData += ") AS\n";
 					_strFileData += "BEGIN\n\n";
 					_strFileData += "	IF (@ID = 0)\n	BEGIN\n\n";
 					_strFileData += "		SELECT * \n";
-					_strFileData += "		  FROM tbl" + this.ClassName + "\n";
+					_strFileData += "		  FROM " + GetTableName+ "\n";
 					_strFileData += "		 WHERE ((@ACTIVEONLY = ((1)) AND IsActive = ((1)) ) OR @ACTIVEONLY = ((0)) )\n";
 					_strFileData += "		 ORDER BY " + GetIndexVariable + ";\n";
 					_strFileData += "\n	END\n	ELSE\n	BEGIN\n\n";
 					_strFileData += "		SELECT TOP 1 * \n";
-					_strFileData += "		  FROM tbl" + this.ClassName + "\n";
+					_strFileData += "		  FROM " + GetTableName + "\n";
 					_strFileData += "		 WHERE " + GetIndexVariable + " = @ID\n";
 					_strFileData += "		   AND ((@ACTIVEONLY = ((1)) AND IsActive = ((1)) ) OR @ACTIVEONLY = ((0)) );\n";
 					_strFileData += "\n	END\n";
@@ -788,15 +824,15 @@ namespace CBT
 							_strFileData += "GO\n\n";
 //						_strFileData += "-- =============================================\n";
 //						_strFileData += "-- Create date: " + System.DateTime.Now.ToString("MMM dd yyyy - hh:mm:ss tt") + "\n";
-//						_strFileData += "-- Description: spGet" + this.ClassName + "By" + Variables[i].Name + "\n";
+//						_strFileData += "-- Description: " + GetStoredProcedureName + "GetBy" + Variables[i].Name + "\n";
 //						_strFileData += "-- =============================================\n";
-							_strFileData += "CREATE PROCEDURE [dbo].[spGet" + this.ClassName + "By" + Variables[i].Name + "] (\n";
+							_strFileData += "CREATE PROCEDURE [dbo].[" + GetStoredProcedureName + "GetBy" + Variables[i].Name + "] (\n";
 							_strFileData += "	@FIND				" + Variables[i].GetSQLtype + ",\n";
 							_strFileData += "	@ACTIVEONLY	BIT = TRUE\n";
 							_strFileData += ") AS\n";
 							_strFileData += "BEGIN\n\n";
 							_strFileData += "	SELECT TOP 1 * \n";
-							_strFileData += "	  FROM tbl" + this.ClassName + "\n";
+							_strFileData += "	  FROM " + GetTableName + "\n";
 							if (Variables[i].VarType.ToLower() == "string")
 								_strFileData += "	 WHERE LOWER(" + Variables[i].Name + ") = LOWER(@FIND)\n";
 							else
@@ -819,9 +855,9 @@ namespace CBT
 					_strFileData += "GO\n\n";
 //				_strFileData += "-- =============================================\n";
 //				_strFileData += "-- Create date: " + System.DateTime.Now.ToString("MMM dd yyyy - hh:mm:ss tt") + "\n";
-//				_strFileData += "-- Description: spUpdate" + this.ClassName + "\n";
+//				_strFileData += "-- Description: " + GetStoredProcedureName + "Update\n";
 //				_strFileData += "-- =============================================\n";
-					_strFileData += "CREATE PROCEDURE [dbo].[spUpdate" + this.ClassName + "]( \n";
+					_strFileData += "CREATE PROCEDURE [dbo].[" + GetStoredProcedureName + "Update]( \n";
 					for (int i = 0; i < Variables.Count; i++)
 					{
 						if (!Variables[i].IsDeleted && 
@@ -839,13 +875,13 @@ namespace CBT
 					_strFileData += "	IF (@" + strIndex.ToUpper() + " = 0)\n";
 					_strFileData += "	BEGIN\n\n";
 					_strFileData += "		SELECT TOP 1 @" + strIndex.ToUpper() + " = " + strIndex + "\n";
-					_strFileData += "		  FROM tbl" + this.ClassName + "\n";
+					_strFileData += "		  FROM " + GetTableName + "\n";
 					_strFileData += "		 WHERE " + strIndex + " = @" + strIndex.ToUpper() + "\n\n";
 					_strFileData += "	END;\n\n";
-					_strFileData += "	SELECT @Find=COUNT(" + strIndex + ") FROM tbl" + this.ClassName + " WHERE " + strIndex + " = @" + strIndex.ToUpper() + ";\n\n";
+					_strFileData += "	SELECT @Find=COUNT(" + strIndex + ") FROM " + GetTableName + " WHERE " + strIndex + " = @" + strIndex.ToUpper() + ";\n\n";
 					_strFileData += "	IF (@Find > 0 AND @" + strIndex.ToUpper() + " > 0)\n";
 					_strFileData += "	BEGIN\n\n";
-					_strFileData += "		UPDATE tbl" + this.ClassName + " SET\n";
+					_strFileData += "		UPDATE " + GetTableName + " SET\n";
 					bool blnStarted = false;
 					for (int i = 0; i < Variables.Count; i++)
 					{
@@ -862,12 +898,12 @@ namespace CBT
 					_strFileData += "	END\n";
 					_strFileData += "	ELSE\n";
 					_strFileData += "	BEGIN\n\n";
-					_strFileData += "		SELECT @Max = MAX(" + strIndex + ")+1 FROM tbl" + this.ClassName + ";\n\n";
+					_strFileData += "		SELECT @Max = MAX(" + strIndex + ")+1 FROM " + GetTableName + ";\n\n";
 					_strFileData += "		IF (@Max IS NULL OR @Max < 1)\n";
 					_strFileData += "		BEGIN\n";
-					_strFileData += "			SELECT @Max=COUNT(" + strIndex + ")+1 FROM tbl" + this.ClassName + ";\n";
+					_strFileData += "			SELECT @Max=COUNT(" + strIndex + ")+1 FROM " + GetTableName + ";\n";
 					_strFileData += "		END\n\n";
-					_strFileData += "		INSERT INTO tbl" + this.ClassName + " \n";
+					_strFileData += "		INSERT INTO " + GetTableName + " \n";
 					_strFileData += "		(" + strIndex;
 					for (int i = 0; i < Variables.Count; i++)
 					{
@@ -1241,7 +1277,7 @@ namespace CBT
 							_strFileData += "				" + strDAL + "ClearParams();\n";
 							_strFileData += "				" + strDAL + "AddParam(\"ID\",					0);\n";
 							_strFileData += "				" + strDAL + "AddParam(\"ACTIVEONLY\",	blnActiveOnly);\n";
-							_strFileData += "				DataTable dt = " + strDAL + "GetSPDataTable(\"spGet" + this.ClassName + "ByID\");\n";
+							_strFileData += "				DataTable dt = " + strDAL + "GetSPDataTable(\"" + GetStoredProcedureName + "GetByID\");\n";
 							_strFileData += "				List<" + this.ClassName + "> lib = new List<" + this.ClassName + ">();\n";
 							_strFileData += "				if (dt != null && dt.Rows.Count > 0)\n				{\n";
 							_strFileData += "					foreach (DataRow dr in dt.Rows)\n					{\n";
@@ -1272,7 +1308,7 @@ namespace CBT
 						_strFileData += "				" + DatabaseCall + "ClearParams();\n";
 						_strFileData += "				" + DatabaseCall + "AddParam(\"ID\",					intID);\n";
 						_strFileData += "				" + DatabaseCall + "AddParam(\"ACTIVEONLY\",	blnActiveOnly);\n";
-						_strFileData += "				DataTable dt = " + DatabaseCall + "GetSPDataTable(\"spGet" + this.ClassName + "ByID\");\n";
+						_strFileData += "				DataTable dt = " + DatabaseCall + "GetSPDataTable(\"" + GetStoredProcedureName + "GetByID\");\n";
 						_strFileData += "				if (dt != null && dt.Rows.Count > 0)\n				{\n";
 						_strFileData += "					PopulateClass(dt.Rows[0]);\n";
 						_strFileData += "					return true;\n";
@@ -1296,7 +1332,7 @@ namespace CBT
 								else
 								_strFileData += "				" + DatabaseCall + "AddParam(\"FIND\",				xFind);\n";
 								_strFileData += "				" + DatabaseCall + "AddParam(\"ACTIVEONLY\",	blnActiveOnly);\n";
-								_strFileData += "				DataTable dt = " + DatabaseCall + "GetSPDataTable(\"spGet" + this.ClassName + "By" + Variables[i].Name + "\");\n";
+								_strFileData += "				DataTable dt = " + DatabaseCall + "GetSPDataTable(\"" + GetStoredProcedureName + "GetBy" + Variables[i].Name + "\");\n";
 								_strFileData += "				if (dt != null && dt.Rows.Count > 0)\n				{\n";
 								_strFileData += "					PopulateClass(dt.Rows[0]);\n";
 								_strFileData += "					return true;\n";
@@ -1325,7 +1361,7 @@ namespace CBT
 								_strFileData += "				" + DatabaseCall + "AddParam(\"" + Variables[i].Name.ToUpper() + "\", " + Variables[i].GetConversionToParam + ");\n";
 						}
 						_strFileData += "				" + DatabaseCall + "AddParam(\"NEWID\", DbType.Int32);\n";
-						_strFileData += "				int n = " + DatabaseCall + "GetSPInt(\"spUpdate" + this.ClassName + "\");\n";
+						_strFileData += "				int n = " + DatabaseCall + "GetSPInt(\"" + GetStoredProcedureName + "Update\");\n";
 						string st = GetIndexPrivateVariable;
 						if (st != "")
 						{
@@ -1495,8 +1531,8 @@ namespace CBT
 									_strFileData	+= "				return " + this.ClassName + "Manager.Instance." + this.ClassName + "s.Find(x => x." + Variables[i].Name + ".ToLower() == " + Variables[i].GetPrivatePrefix + "Find.ToLower());\n";
 								else
 									_strFileData	+= "				return " + this.ClassName + "Manager.Instance." + this.ClassName + "s.Find(x => x." + Variables[i].Name + " == " + Variables[i].GetPrivatePrefix + "Find);\n";
-								_strFileData		+= "		}\n";
 								_strFileData		+= "			else\n				return null;\n";
+								_strFileData		+= "		}\n";
 							}
 						} else {
 							if (Variables[i].IsIndex)
@@ -1824,7 +1860,7 @@ namespace CBT
 						_strFileData += "				" + strDAL + "ClearParams();\n";
 						_strFileData += "				" + strDAL + "AddParam(\"ID\",					0);\n";
 						_strFileData += "				" + strDAL + "AddParam(\"ACTIVEONLY\",	blnActiveOnly);\n";
-						_strFileData += "				DataTable dt = " + strDAL + "GetSPDataTable(\"spGet" + this.ClassName + "ByID\");\n";
+						_strFileData += "				DataTable dt = " + strDAL + "GetSPDataTable(\"" + GetStoredProcedureName + "GetByID\");\n";
 						_strFileData += "				if (dt != null && dt.Rows.Count > 0)\n				{\n";
 						_strFileData += "					foreach (DataRow dr in dt.Rows)\n					{\n";
 						_strFileData += "						" + this.ClassName + "	temp = new " + this.ClassName + "();\n";
