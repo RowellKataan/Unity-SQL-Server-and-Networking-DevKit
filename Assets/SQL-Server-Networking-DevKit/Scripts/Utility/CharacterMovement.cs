@@ -10,6 +10,8 @@ public class CharacterMovement : NetworkBehaviour
 
 		private float			fMovementSpeed	= 10.0f;
 		private float			fRotationSpeed	= 100.0f;
+		private bool			blnColliding		= false;
+		private Rigidbody	rb							= null;
 
 	#endregion
 
@@ -64,6 +66,9 @@ public class CharacterMovement : NetworkBehaviour
 				return;
 			}
 
+			if (GetComponent<Rigidbody>() != null)
+				rb = GetComponent<Rigidbody>();
+
 			// ATTACH THE CAMERA TO THE PLAYER OBJECT
 			Transform cam = Camera.main.gameObject.transform;
 			cam.SetParent(this.transform);
@@ -82,14 +87,27 @@ public class CharacterMovement : NetworkBehaviour
 			if (!App.IsLoggedIn && !Net.IsHost)
 					return;
 
-			float translation	= CrossPlatformInputManager.GetAxis("Vertical") * fMovementSpeed * ((Input.GetKey(KeyCode.LeftShift)) ? 2 : 1);
-			float rotation		= CrossPlatformInputManager.GetAxis("Horizontal") * fRotationSpeed;
+			float translation	= CrossPlatformInputManager.GetAxis("Vertical")		* fMovementSpeed * ((Input.GetKey(KeyCode.LeftShift)) ? 2 : 1);
+			float rotation		= CrossPlatformInputManager.GetAxis("Horizontal")	* fRotationSpeed;
 
 			translation	*= Time.deltaTime;
 			rotation		*= Time.deltaTime;
 
+			if (rb != null)
+			{
+				rb.isKinematic = true;
+				rb.velocity = Vector3.zero;
+				rb.angularVelocity = Vector3.zero;
+				rb.isKinematic = false;
+			}
+
 			transform.Translate(0, 0, translation);
-			transform.Rotate(0, rotation, 0);
+			transform.Rotate(		0, rotation, 0);
+
+			Quaternion trot = transform.rotation;
+			trot[0] = 0; //null rotation X
+			trot[2] = 0; //null rotation Z
+			transform.rotation = trot;
 		}
 
 	#endregion
@@ -106,6 +124,36 @@ public class CharacterMovement : NetworkBehaviour
 			{
 
 			}
+		}
+
+		private						void	OnCollisionEnter(	Collision collision)
+		{
+			if (collision.gameObject.tag.ToLower() == "ground")
+					return;
+			Debug.Log("Collision " + collision.gameObject.name);
+			blnColliding = true;
+		}
+		private						void	OnCollisionExit(	Collision collision)
+		{
+			blnColliding = false;
+		}
+		private						void	OnTriggerEnter(		Collider collision)
+		{
+			if (collision.gameObject.tag.ToLower() == "ground")
+					return;
+			Debug.Log("Collider " + collision.gameObject.name);
+			blnColliding = true;
+		}
+		private						void	OnTriggerExit(		Collider collision)
+		{
+			blnColliding = false;
+		}
+		private						void	OnControllerColliderHit(ControllerColliderHit hit)
+		{
+			if (hit.gameObject.tag.ToLower() == "ground")
+					return;
+			Debug.Log("OnControllerColliderHit "  + hit.gameObject.name);
+			blnColliding = true;
 		}
 
 	#endregion
