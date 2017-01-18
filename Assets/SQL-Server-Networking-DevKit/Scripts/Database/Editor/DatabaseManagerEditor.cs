@@ -11,7 +11,6 @@
 using UnityEngine;
 using UnityEditor;
 using UnityEditor.SceneManagement;
-using System.Collections;
 
 [CustomEditor(typeof(DatabaseManager))]
 public class DatabaseManagerEditor : Editor
@@ -83,7 +82,8 @@ public class DatabaseManagerEditor : Editor
 				if (GUI.changed)
 				{
 					EditorUtility.SetDirty(myTarget);
-					EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+					if (!Application.isPlaying)
+						EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
 				}
 		}
 	}

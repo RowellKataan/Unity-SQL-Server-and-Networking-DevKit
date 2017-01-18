@@ -130,29 +130,31 @@ public class CharacterMovement : NetworkBehaviour
 		{
 			if (collision.gameObject.tag.ToLower() == "ground")
 					return;
-			Debug.Log("Collision " + collision.gameObject.name);
+//		Debug.Log("Collision Enter " + collision.gameObject.name);
 			blnColliding = true;
 		}
 		private						void	OnCollisionExit(	Collision collision)
 		{
+//		Debug.Log("Collision Exit " + collision.gameObject.name);
 			blnColliding = false;
 		}
 		private						void	OnTriggerEnter(		Collider collision)
 		{
 			if (collision.gameObject.tag.ToLower() == "ground")
 					return;
-			Debug.Log("Collider " + collision.gameObject.name);
+//		Debug.Log("Collider Enter " + collision.gameObject.name);
 			blnColliding = true;
 		}
 		private						void	OnTriggerExit(		Collider collision)
 		{
+//		Debug.Log("Collider Exit " + collision.gameObject.name);
 			blnColliding = false;
 		}
 		private						void	OnControllerColliderHit(ControllerColliderHit hit)
 		{
 			if (hit.gameObject.tag.ToLower() == "ground")
 					return;
-			Debug.Log("OnControllerColliderHit "  + hit.gameObject.name);
+//		Debug.Log("OnControllerColliderHit "  + hit.gameObject.name);
 			blnColliding = true;
 		}
 

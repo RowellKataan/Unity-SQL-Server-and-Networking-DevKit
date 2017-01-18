@@ -1963,7 +1963,7 @@ namespace CBT
 
 				_strFileData += "using UnityEngine;\n";
 				_strFileData += "using UnityEditor;\n";
-				_strFileData += "using System.Collections;\n\n";
+				_strFileData += "using UnityEditor.SceneManagement;\n\n";
 				_strFileData += "[CustomEditor(typeof(" + strClassName + "))]\n";
 				_strFileData += "public class " + strClassName + "Editor : Editor\n";
 				_strFileData += "{\n\n";
@@ -2051,8 +2051,11 @@ namespace CBT
 						}
 					}
 				}
-				_strFileData += "\n			if (GUI.changed)\n";
+				_strFileData += "\n			if (GUI.changed)\n				{\n";
 				_strFileData += "				EditorUtility.SetDirty(myTarget);\n";
+				_strFileData += "				if (!Application.isPlaying)\n";
+				_strFileData += "					EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());\n";
+				_strFileData += "			}\n";
 				_strFileData += "		}\n";
 				_strFileData += "	}\n";
 				_strFileData += "}\n\n";
@@ -2083,6 +2086,7 @@ namespace CBT
 				_strFileData += "using UnityEditor;\n";
 				if (IsANetworkObject)
 				_strFileData += "using UnityEngine.Networking;\n";
+				_strFileData += "using UnityEditor.SceneManagement;\n";
 				_strFileData += "using System.Collections;\n\n";
 				_strFileData += "[CustomEditor(typeof(" + strClassName + "))]\n";
 				_strFileData += "public class " + strClassName + "Editor : Editor\n";
@@ -2208,6 +2212,8 @@ namespace CBT
 				_strFileData += "				EditorGUILayout.EndHorizontal();\n\n";
 				_strFileData += "				if (GUI.changed)\n				{\n";
 				_strFileData += "					EditorUtility.SetDirty(myTarget);\n";
+				_strFileData += "					if (!Application.isPlaying)\n";
+				_strFileData += "						EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());\n";
 				_strFileData += "					blnSave = true;\n";
 				_strFileData += "				}\n";
 				_strFileData += "				if (blnSave && GUILayout.Button(\"SAVE\"))\n				{\n";
