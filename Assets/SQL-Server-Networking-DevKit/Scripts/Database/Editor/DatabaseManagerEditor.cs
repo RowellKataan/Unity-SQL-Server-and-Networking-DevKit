@@ -10,11 +10,14 @@
 
 using UnityEngine;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using System.Collections;
 
 [CustomEditor(typeof(DatabaseManager))]
 public class DatabaseManagerEditor : Editor
 {
+
+	private string strDec = "";
 
 	public override void OnInspectorGUI()
 	{
@@ -25,7 +28,7 @@ public class DatabaseManagerEditor : Editor
 		{
 				GUI.changed = false;
 
-
+				
 				EditorStyles.label.fontStyle	= FontStyle.Bold;
 				EditorGUILayout.LabelField("DATABASE CONFIGURATION");
 				EditorStyles.label.fontStyle	= FontStyle.Normal;
@@ -43,6 +46,15 @@ public class DatabaseManagerEditor : Editor
 				}
 				myTarget.KeepConnectionOpen		= EditorGUILayout.Toggle("Keep Connection Open",	myTarget.KeepConnectionOpen);
 				myTarget.ClientsCanUse				= EditorGUILayout.Toggle(		"Client Can Use DB",	myTarget.ClientsCanUse);
+				EditorGUILayout.TextField("Encrypted Text", strDec, GUILayout.MaxHeight(75));
+				if (GUILayout.Button("Show Encryption Text"))
+				{
+					strDec  = "";
+					strDec += "Server: "   + myTarget.DBserver + "," + myTarget.DBport.ToString() + "\n";
+					strDec += "Database: " + myTarget.DBdatabase + "\n";
+					strDec += "Username: " + Crypto.Encrypt(myTarget.DBuser) + "\n";
+					strDec += "Password: " + Crypto.Encrypt(myTarget.DBpassword) + "\n";
+				}
 
 				if (Application.isPlaying)
 				{
@@ -69,7 +81,10 @@ public class DatabaseManagerEditor : Editor
 				}
 
 				if (GUI.changed)
+				{
 					EditorUtility.SetDirty(myTarget);
+					EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+				}
 		}
 	}
 }

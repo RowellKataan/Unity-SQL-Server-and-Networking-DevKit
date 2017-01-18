@@ -1,0 +1,11 @@
+//--UNCLASSIFIED NETWORK SERVER
+//--(applicationmode: 1=client, 2=server)
+applicationmode=1
+serverip=172.16.6.8
+serverport=95
+password=
+
+//----SERVER SETTINGS
+displayname=Demo
+description=SQL Network Demo Application
+maxconnections=250

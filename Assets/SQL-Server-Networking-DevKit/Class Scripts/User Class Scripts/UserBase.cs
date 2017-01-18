@@ -19,20 +19,21 @@ public class UserBase : NetworkBehaviour
 	#region "PRIVATE VARIABLES"
 
 		// INDEX VARIABLE
-		[SerializeField]	protected	int		_intUserID	=	0;
+		[SerializeField]	protected	int								_intUserID	=	0;
 		[SerializeField]	protected	System.DateTime		_dtDateCreated = System.DateTime.Parse("01/01/1900");
 		[SerializeField]	protected	System.DateTime		_dtDateUpdated = System.DateTime.Parse("01/01/1900");
-		[SerializeField]	protected	bool		_blnIsActive	=	true;
-		[SerializeField]	protected	string		_strUsername	=	"";
-		[SerializeField]	protected	string		_strPassword	=	"";
-		[SerializeField]	protected	string		_strFirstName	=	"";
-		[SerializeField]	protected	string		_strLastName	=	"";
-		[SerializeField]	protected	string		_strEmailAddress	=	"";
-		[SerializeField]	protected	UserTypes		_enUserType	=	UserTypes.NONE;
-		[SerializeField]	protected	int		_intWarnings	=	0;
+		[SerializeField]	protected	bool							_blnIsActive	=	true;
+		[SerializeField]	protected	string						_strUsername	=	"";
+		[SerializeField]	protected	string						_strPassword	=	"";
+		[SerializeField]	protected	string						_strFirstName	=	"";
+		[SerializeField]	protected	string						_strLastName	=	"";
+		[SerializeField]	protected	string						_strEmailAddress	=	"";
+		[SerializeField]	protected	UserTypes					_enUserType	=	UserTypes.NONE;
+		[SerializeField]	protected	int								_intWarnings	=	0;
 		[SerializeField]	protected	System.DateTime		_dtBanDate = System.DateTime.Parse("01/01/1900");
-		[SerializeField]	protected	int		_intBanDays	=	0;
-		private NetworkConnection		_netConn;
+		[SerializeField]	protected	int								_intBanDays	=	0;
+
+											private NetworkConnection		_netConn;
 
 	#endregion
 
@@ -235,6 +236,23 @@ public class UserBase : NetworkBehaviour
 			_dtBanDate = System.DateTime.Parse("01/01/1900");
 			_intBanDays	=	0;
 		}
+		public	virtual	void		LoadUserFromDataRow(DataRow dr)
+		{
+			_intUserID				= Util.ConvertToInt(dr["USERID"].ToString());
+			_strUsername			= dr["USERNAME"].ToString();
+			_strFirstName			= dr["FIRSTNAME"].ToString();
+			_strLastName			= dr["LASTNAME"].ToString();
+			_strPassword			= dr["USERNAME"].ToString();
+			_strEmailAddress	= dr["EMAILADDRESS"].ToString();
+			_blnIsActive			= Util.ConvertToBoolean(dr["ISACTIVE"].ToString());
+			_dtDateUpdated		= Util.ConvertToDate(dr["DATEUPDATED"].ToString());
+			_dtDateCreated		= Util.ConvertToDate(dr["DATECREATED"].ToString());
+/*
+			IsDeleted	= Util.ConvertToBoolean(dr["ISDELETED"].ToString());
+			IsBanned	= Util.ConvertToBoolean(dr["ISBANNED"].ToString());
+			ConnectionCount	= Util.ConvertToInt(dr["CONNECTIONCOUNT"].ToString());
+*/
+		}
 
 	#endregion
 
@@ -251,10 +269,12 @@ public class UserBase : NetworkBehaviour
 			_strFirstName = dr["FIRSTNAME"].ToString();
 			_strLastName = dr["LASTNAME"].ToString();
 			_strEmailAddress = dr["EMAILADDRESS"].ToString();
+/*
 			_enUserType = ((UserTypes) Util.ConvertToInt(dr["USERTYPE"].ToString()));
 			_intWarnings = Util.ConvertToInt(dr["WARNINGS"].ToString());
 			_dtBanDate = Util.ConvertToDate(dr["BANDATE"].ToString());
 			_intBanDays = Util.ConvertToInt(dr["BANDAYS"].ToString());
+*/
 		}
 		public	virtual		bool	LoadByID(int intID, bool blnActiveOnly = false)
 		{
@@ -282,7 +302,7 @@ public class UserBase : NetworkBehaviour
 			{
 				// LOAD FROM THE DATABASE TABLE
 				Database.DAL.ClearParams();
-				Database.DAL.AddParam("FIND",				xFind);
+				Database.DAL.AddParam("USERID",			xFind);
 				Database.DAL.AddParam("ACTIVEONLY",	blnActiveOnly);
 				DataTable dt = Database.DAL.GetSPDataTable("spGetUserByUserID");
 				if (dt != null && dt.Rows.Count > 0)
@@ -299,7 +319,7 @@ public class UserBase : NetworkBehaviour
 			{
 				// LOAD FROM THE DATABASE TABLE
 				Database.DAL.ClearParams();
-				Database.DAL.AddParam("FIND",				xFind);
+				Database.DAL.AddParam("USERNAME",		xFind);
 				Database.DAL.AddParam("ACTIVEONLY",	blnActiveOnly);
 				DataTable dt = Database.DAL.GetSPDataTable("spGetUserByUsername");
 				if (dt != null && dt.Rows.Count > 0)
@@ -316,7 +336,7 @@ public class UserBase : NetworkBehaviour
 			{
 				// LOAD FROM THE DATABASE TABLE
 				Database.DAL.ClearParams();
-				Database.DAL.AddParam("FIND",				xFind);
+				Database.DAL.AddParam("EMAIL",			xFind);
 				Database.DAL.AddParam("ACTIVEONLY",	blnActiveOnly);
 				DataTable dt = Database.DAL.GetSPDataTable("spGetUserByEmailAddress");
 				if (dt != null && dt.Rows.Count > 0)
@@ -344,7 +364,7 @@ public class UserBase : NetworkBehaviour
 			}
 			return false;
 		}
-		public	virtual		void	Save()
+		public	virtual		bool	Save()
 		{
 			if (Database.DAL.IsConnected)
 			{
@@ -358,15 +378,21 @@ public class UserBase : NetworkBehaviour
 				Database.DAL.AddParam("FIRSTNAME", FirstName);
 				Database.DAL.AddParam("LASTNAME", LastName);
 				Database.DAL.AddParam("EMAILADDRESS", EmailAddress);
+/*
 				Database.DAL.AddParam("USERTYPE", UserTypeInt);
 				Database.DAL.AddParam("WARNINGS", Warnings);
 				Database.DAL.AddParam("BANDATE", BanDate);
 				Database.DAL.AddParam("BANDAYS", BanDays);
+*/
 				Database.DAL.AddParam("NEWID", DbType.Int32);
 				int n = Database.DAL.GetSPInt("spUpdateUser");
 				if (_intUserID != n)
 					_intUserID = n;
+				
+				if (_intUserID > 0)
+					return true;
 			}
+			return false;
 		}
 
 	#endregion
@@ -409,11 +435,6 @@ public class UserBase : NetworkBehaviour
 			_dtBanDate = Util.ConvertToDate(strSpl[11]);
 			_intBanDays = Util.ConvertToInt(strSpl[12]);
 		}
-
-	#endregion
-
-	#region "NETWORK FUNCTIONS"
-
 
 	#endregion
 

@@ -88,7 +88,7 @@ public class SQLdemoScript : MonoBehaviour
 			{ 
 				// QUERY THE DATABASE -- COUNT THE NUMBER OF RECORDS IN OUR TEST TABLE
 				Database.DAL.ClearParams();
-				int i = Database.DAL.GetSQLSelectInt("SELECT COUNT(*) FROM tblTest");
+				int i = Database.DAL.GetSQLSelectInt("SELECT COUNT(*) FROM tblUser");
 
 				// DISPLAY THE RESULTS (OR ERRORS) 
 				ResultText = (Database.DAL.Errors == "") ? "Success!  " : "Failed!  ";
@@ -107,7 +107,7 @@ public class SQLdemoScript : MonoBehaviour
 			{ 
 				// QUERY THE DATABASE -- COUNT THE NUMBER OF RECORDS IN OUR TEST TABLE
 				Database.DAL.ClearParams();
-				int i = Database.DAL.GetSQLSelectInt("SELECT COUNT(*) FROM tblTest WHERE ID < 3");
+				int i = Database.DAL.GetSQLSelectInt("SELECT COUNT(*) FROM tblUser WHERE UserID < 3");
 
 				// DISPLAY THE RESULTS (OR ERRORS) 
 				ResultText = (Database.DAL.Errors == "") ? "Success!  " : "Failed!  ";

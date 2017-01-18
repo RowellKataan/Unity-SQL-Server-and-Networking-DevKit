@@ -7,6 +7,7 @@
 
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.Networking;
 using System.Collections;
 using System.Collections.Generic;
 using System.Data;
@@ -16,13 +17,15 @@ public class UserManager : MonoBehaviour
 
 	#region "PRIVATE VARIABLES"
 
-		private	static	UserManager									_instance = null;
+		private	static	UserManager				_instance = null;
 
 		private bool		_blnInitialized		= false;
 
 		// _blnLoadAllAtStart:  true=Load all Records from Database into Class, false=Start with Empty List, allow developer to add/remove to List.
 		[SerializeField]				private bool				_blnLoadAllAtStart	= false;
-		[System.NonSerialized]	private	List<User>	_users	= new List<User>();
+		[System.NonSerialized]	private	List<User>	_users							= new List<User>();
+		[System.NonSerialized]	private	User[]			_guObj;
+		[System.NonSerialized]	private int					_intUserCnt					= 0;
 
 	#endregion
 
@@ -52,6 +55,17 @@ public class UserManager : MonoBehaviour
 					return _dbm;
 			}
 		}
+
+	#endregion
+
+	#region "PUBLIC EDITOR PROPERTIES"
+
+		[SerializeField]
+		public	GameObject			UserInfoPrefab		= null;
+		[SerializeField]
+		public	GameObject			UserListContainer	= null;
+		[SerializeField]
+		public	Scrollbar				UserListScrollbar	= null;
 
 	#endregion
 
@@ -85,9 +99,14 @@ public class UserManager : MonoBehaviour
 
 	#region "PRIVATE FUNCTIONS"
 
+		private void				Awake()
+		{
+			_instance = this;
+		}
 		private	void				Start()
 		{
 			_users = new List<User>();
+			_intUserCnt	= 0;
 			StartCoroutine(DoStart());
 		}
 		private void				OnEnable()
@@ -136,6 +155,226 @@ public class UserManager : MonoBehaviour
 		public	void						Remove(User clsuser)
 		{
 			_users.Remove(clsuser);
+		}
+
+		public	User			CheckUserLogin(string strUsername, string strPassword, ref string strResult)
+		{
+			if (!AppNetworkManager.Instance.IsServer)
+				return null;
+
+			int intResult = 0;
+			DataTable dt	= null;
+			 
+			if (Database.IsConnected)
+			{ 
+				Database.DAL.ClearParams();
+				Database.DAL.AddParam("USERNAME", strUsername);
+				switch (ApplicationManager.Instance.UserLoginType)
+				{
+					case 1:		// USERNAME/PASSWORD LOGIN
+						Database.DAL.AddParam("PASSWORD", strPassword);
+						dt = Database.DAL.GetSPDataTable("spGetUserByLogin");
+						if (dt != null && dt.Rows.Count > 0)
+							intResult = Util.ConvertToInt(dt.Rows[0]["TOTAL"].ToString()) + 1;			// REMOVE THE +1 FOR NON-NWC PROJECTS
+						break;
+					case 2:		// WINDOWS USERNAME LOGIN
+						dt = Database.DAL.GetSPDataTable("spGetUserByLogin");
+						if (dt != null && dt.Rows.Count > 0)
+							intResult = Util.ConvertToInt(dt.Rows[0]["TOTAL"].ToString()) + 1;
+						break;
+					default:
+						intResult = 0;
+						break;
+				}
+				if (dt != null && dt.Rows.Count > 0)
+				{
+/*
+					if (!Util.ConvertToBoolean(dt.Rows[0]["ISACTIVE"].ToString()))
+						intResult = 5;
+					if (Util.ConvertToBoolean(dt.Rows[0]["ISDELETED"].ToString()))
+						intResult = 6;
+					if (Util.ConvertToBoolean(dt.Rows[0]["ISBANNED"].ToString()))
+						intResult = 7;
+*/
+				}
+			} else
+				intResult = -1;
+
+			User temp = new User();
+			switch (intResult)
+			{
+				default:		// DATABASE IS OFFLINE/INACCESSIBLE
+					strResult = "-- Database Unavailable  (" + intResult.ToString() + ")";
+					return null;
+				case 0:			// INVALID USERNAME/PASSWORD
+					switch (ApplicationManager.Instance.UserLoginType)
+					{
+						case 1:		// USERNAME/PASSWORD -- USERNAME DOES NOT EXIST
+							strResult = "-- Invalid Username/Password";
+							return null;
+						case 2:		// WINDOWS USERNAME  -- USERNAME DOES NOT EXIST
+							if (ApplicationManager.Instance.AutoCreateAccount)
+							{
+								// CREATE THE ACCOUNT IN THE USER TABLE
+								temp = new User();
+								temp.Username = strUsername;
+								if (temp.Save())
+								{ 
+//								temp.NetworkPlayer = player;
+									AddUser(temp);
+									strResult = "Load";
+									return temp;
+								} else {
+									strResult = "-- Unable to Create New User Account";
+									return null;
+								}
+							} else {
+								strResult = "-- Invalid Username/Password";
+								return null;
+							}
+					}
+					break;
+				case 1:			// INVALID USERNAME/PASSWORD
+					strResult = "-- Invalid Username/Password";
+					return null;
+				case 2:			// SUCCESS -- LOG THE USER IN
+				case 3:
+					if (dt != null && dt.Rows.Count > 0)
+					{
+						temp = new User();
+						temp.LoadUserFromDataRow(dt.Rows[0]);
+//					temp.NetworkPlayer = player;
+						AddUser(temp);
+						strResult = "Load";
+						return temp;
+					} else {
+						strResult = "-- Unable to Initialize User Account";
+						return null;
+					}
+				case 5:			// USER ACCOUNT IS INACTIVE
+					strResult = "-- User Account is Inactive";
+					return null;
+				case 6:			// USER ACCOUNT DELETED
+					strResult = "-- User Account Deleted";
+					return null;
+				case 7:			// USER ACCOUNT BANNED
+					strResult = "-- User Account Banned";
+					return null;
+			}
+			return null;
+		}
+
+		public	void			ResetUsers()
+		{
+			_users = new List<User>();
+		}
+		public	void			AddUser(User user)
+		{
+			if (user == null)
+			{
+				Debug.LogError("User is NULL");
+				return;
+			}
+			if (user.UserID < 0)
+			{
+				Debug.LogError("UserID is -1.  Cannot Save Server TempUser.");
+				return;
+			}
+
+			if (_users == null)
+					_users = new List<User>();
+
+			// ADD THE USER INTO THE LIST
+			Users.Add(user);
+
+			if (!AppNetworkManager.Instance.IsServer)
+				return;
+
+			// CREATE THE USER INFO PANEL FOR THE USER
+			if (UserListContainer != null && UserInfoPrefab != null)
+			{
+				GameObject go = (GameObject) GameObject.Instantiate(UserInfoPrefab);
+				go.name = user.Username;
+				go.transform.SetParent(UserListContainer.transform);
+				go.GetComponent<UserInfoPanel>().User = user;
+				float		f		= ((UserListContainer.transform.childCount - 1) * go.GetComponent<RectTransform>().rect.height) + 2;
+				Vector2 v2	= new Vector2(0, f * -1);
+				go.GetComponent<RectTransform>().localPosition = v2;
+				v2		= UserListContainer.GetComponent<RectTransform>().sizeDelta;
+				v2.y	= f + (go.GetComponent<RectTransform>().rect.height + 2);
+				UserListContainer.GetComponent<RectTransform>().sizeDelta = v2;
+				if (UserListScrollbar != null)
+					UserListScrollbar.value = 1;
+			}
+		}
+		public	void			RemoveUserByUser(User user)
+		{
+			// DELETE THE USER INFO PANEL FROM THE LIST
+			if (AppNetworkManager.Instance.IsServer && UserListContainer != null)
+			{
+				float fh		= 0;
+				float rh		= 0;
+				int		m			= UserListContainer.transform.childCount;
+
+				for (int i = 0; i < m; i++)
+				{
+					GameObject		go = UserListContainer.transform.GetChild(i).gameObject;
+					UserInfoPanel ip = go.GetComponent<UserInfoPanel>();
+					RectTransform rt = go.GetComponent<RectTransform>();
+					rh = rt.rect.height;
+					if (ip.User.NetID == user.NetID)
+					{
+						DestroyImmediate(go);
+						m--;
+						i--;
+					} else {
+						Vector2 v2 = rt.localPosition;
+						v2.y = ((fh * rh) + 2) * -1;
+						go.GetComponent<RectTransform>().localPosition = v2;
+						fh++;
+					}
+				}
+
+				// RESCALE THE CONTAINER
+				RectTransform rx = UserListContainer.GetComponent<RectTransform>();
+				Vector2				vx = rx.sizeDelta;
+				vx.y = ((UserListContainer.transform.childCount * rh) + 4);
+				UserListContainer.GetComponent<RectTransform>().sizeDelta = vx;
+
+				if (UserListScrollbar != null)
+					UserListScrollbar.value = 1;
+			} else 
+				AppNetworkManager.Instance.ServerLog("UserListContainer is NULL. Cannot cull Disconnected User.");
+
+			// REMOVE THE USER FROM THE LIST
+			Users.Remove(user);
+		}
+		public	void			RemoveUserByNetworkConnection(NetworkConnection conn)
+		{
+			User temp = (User) Users.Find(x => x.NetID == conn.connectionId);
+			if (temp != null)
+				RemoveUserByUser(temp);
+		}
+
+		public	User			FindUserByID(int intID)
+		{
+			if (Users.Count < 1)
+				return	null;
+			User temp = null;
+			try { temp = Users.Find(x => x.UserID == intID); } catch { return null; }
+			if (temp != null)
+				return temp;
+			return null;
+		}
+		public	User			FindUserByUsername(string username)
+		{
+			if (Users.Count < 1)
+				return	null;
+			User temp = null;
+			try { temp = Users.Find(x => x.Username.ToLower() == username.ToLower()); } catch { return null; }
+			if (temp != null)
+				return temp;
+			return null;
 		}
 
 	#endregion

@@ -19,6 +19,7 @@
 #define	USES_NETWORKMANAGER				// #define = Scene has an AppNetworkManager Prefab,	#undef = Scene does not have an AppNetworkManager Prefab
 
 using UnityEngine;
+using UnityEngine.UI;
 using System.Collections;
 using System.Collections.Generic;
 
@@ -37,12 +38,15 @@ public	partial	class	ApplicationManager : MonoBehaviour
 		private bool								_blnIsWorkingOffline	= false;
 
 		#if USES_NETWORKMANAGER
+		private GameObject					_userObj							= null;
 		private User								_user									= null;
 		#endif
 
 		#if UNITY_WEBPLAYER
 		public	static	string			webplayerQuitURL		= "http://google.com";
 		#endif
+
+		private string							_strDebugLog				= "";
 
 	#endregion
 
@@ -271,7 +275,7 @@ public	partial	class	ApplicationManager : MonoBehaviour
 					case Classifications.TopSecretSAP:
 						return new Color(0.6875f, 0.55f, 0.0625f);
 					default:
-						return new Color(0, 0, 0, 0.125f);
+						return new Color(0, 0, 0, 0.05f);
 				}
 			}
 		}
@@ -292,18 +296,44 @@ public	partial	class	ApplicationManager : MonoBehaviour
 		}
 		
 		#if USES_NETWORKMANAGER
-		public	GameObject					GameUserObject		= null;
+		public	GameObject					UserObj
+		{
+			get
+			{
+				return _userObj;
+			}
+			set
+			{
+				_userObj = value;
+			}
+		}
 		public	User								GameUser
 		{
 			get
 			{
 				if (_user == null)
-					if (this.GameUserObject != null)
-						_user = this.GameUserObject.GetComponent<User>();
+					if (this.UserObj != null)
+						_user = this.UserObj.GetComponent<User>();
 				return _user;
+			}
+			set
+			{
+				_user = value;
 			}
 		}
 		#endif
+
+		#region "APPLICATION SETTINGS (FROM TEXT FILE)"
+
+			// APPLICATION SETTINGS
+			public	string	CLASSIFICATION_HEADING			= "";
+
+			// GAME MANAGER SETTINGS
+			public	float		DEFAULT_WIDTH					= 1440;
+			public	float		DEFAULT_HEIGHT				= 900;
+			public	int			DEFAULT_APP_TIMEOUT		= 60;		// IN MINUTES
+
+		#endregion
 
 	#endregion
 
@@ -338,6 +368,9 @@ public	partial	class	ApplicationManager : MonoBehaviour
 		[System.NonSerialized, HideInInspector]
 		public	GameObject					UserGameObject		= null;
 
+		[SerializeField]
+		public	Button							WriteErrorLogButton	= null;
+
 	#endregion
 
 	#region "PRIVATE FUNCTIONS"
@@ -349,7 +382,14 @@ public	partial	class	ApplicationManager : MonoBehaviour
 
 			#if USES_NETWORKMANAGER
 			if (Net != null && Net.IsConnected)
+			{
+				if (Net.IsClient) 
 					Net.ClientDisconnect();
+				else if (Net.IsServer)
+					Net.ServerDisconnect();
+				else if (Net.IsHost)
+					Net.HostDisconnect();
+			}
 			#endif
 			#if USES_DATABASEMANAGER
 			if (Database != null && Database.IsConnectedCheck)
@@ -366,14 +406,27 @@ public	partial	class	ApplicationManager : MonoBehaviour
 		}
 		private void					PrivateQuitApplication()
 		{
-			#if USES_NETWORKMANAGER
-			if (Net != null && Net.IsConnected)
-					Net.ClientDisconnect();
-			#endif
-			#if USES_DATABASEMANAGER
-			if (Database != null && Database.IsConnectedCheck)
-					Database.CloseDatabase();
-			#endif
+			try
+			{ 
+/*
+				#if USES_NETWORKMANAGER
+				if (Net != null && Net.IsConnected)
+				{
+					if (Net.IsClient) 
+						Net.ClientDisconnect();
+					else if (Net.IsServer)
+						Net.ServerDisconnect();
+					else if (Net.IsHost)
+						Net.HostDisconnect();
+				}
+				#endif
+*/
+				#if USES_DATABASEMANAGER
+				if (Database != null && Database.IsConnectedCheck)
+						Database.CloseDatabase();
+				#endif
+
+			} catch { }
 
 			#if UNITY_EDITOR
 				UnityEditor.EditorApplication.isPlaying = false;
@@ -382,6 +435,75 @@ public	partial	class	ApplicationManager : MonoBehaviour
 			#else
 				Application.Quit();
 			#endif
+			Application.Quit();
+		}
+		private void					LoadApplicationSettings()
+		{
+			string[]	strLines = null;
+			string		AppSettingsFile = "ApplicationSettings.txt";
+			bool			blnOkayToProcessTextFile = false;
+			int				intWidth				= 0;
+			int				intHeight				= 0;
+
+			if (!Util.FileExists("", AppSettingsFile))
+			{
+				Status.Status			= "Unable to find file \"" + AppSettingsFile + "\". Using Default Settings.";
+			} else {
+				strLines = Util.ReadTextFile("", AppSettingsFile).Split('\n');
+				blnOkayToProcessTextFile = strLines != null && strLines.Length > 0;
+				Status.Status = AppSettingsFile + " found. " + strLines.Length.ToString() + " lines Read In.";
+			}
+
+			if (blnOkayToProcessTextFile)
+			{
+				foreach (string st in strLines)
+				{
+					if (!st.StartsWith("//") && st.Trim() != "" && st.Contains("="))
+					{
+						string[] s = st.Trim().Split('=');
+						if (s.Length > 2)
+						{
+							for (int i = 2; i < s.Length; i++)
+							s[1] += "=" + s[i];
+						}
+						switch (s[0].Trim().ToUpper())
+						{
+							// APPLICATION MANAGER SETTINGS
+							case "CLASSIFICATION":
+								AppClassification = (Classifications)Util.ConvertToInt(s[1].Trim());
+								break;
+							case "CLASSIFICATION_HEADING":
+								CLASSIFICATION_HEADING	= s[1].Trim();
+								break;
+							case "MAX_FPS":
+							case "MAXFPS":
+								MaxFPS = Util.ConvertToInt(s[1].Trim());
+								break;
+
+								// GAME MANAGER SETTINGS
+							case "DEFAULT_WIDTH":
+								DEFAULT_WIDTH		= Util.ConvertToFloat(s[1].Trim());
+								intWidth				= (int) DEFAULT_WIDTH;
+								break;
+							case "DEFAULT_HEIGHT":
+								DEFAULT_HEIGHT	= Util.ConvertToFloat(s[1].Trim());
+								intHeight				= (int) DEFAULT_HEIGHT;
+								break;
+							case "DEFAULT_APP_TIMEOUT":
+								DEFAULT_APP_TIMEOUT = Util.ConvertToInt(s[1].Trim());
+								break;
+						}
+					}
+				}
+			}
+
+			// UPDATE BUTTON
+			Status.UpdateStatus();
+      if (intWidth > 0 && intHeight > 0)
+			{
+				Screen.fullScreen = false;
+				Screen.SetResolution(intWidth, intHeight, false);
+			}
 		}
 		
 	#endregion
@@ -394,7 +516,6 @@ public	partial	class	ApplicationManager : MonoBehaviour
 			strUsername = System.Environment.UserName;
 			return strUsername;
 		} 
-	
 		public	void					LogOff()
 		{
 			#if USES_NETWORKMANAGER
@@ -416,6 +537,42 @@ public	partial	class	ApplicationManager : MonoBehaviour
 		{
 			PrivateQuitApplication();
 		}
+		public	IEnumerator		DelayedQuitApplication(float fDelay = 1.0f)
+		{
+			yield return new WaitForSeconds(fDelay);
+			Status.Status = "Shutting the Server Down...";
+			PrivateQuitApplication();
+		}
+		public	void					AddToDebugLog(string strMsg)
+		{
+			if (strMsg.Trim() != "")
+			{
+				_strDebugLog += "[" + System.DateTime.Now.ToString("MM/dd HH:mm:ss") + "] " + strMsg + "\r\n";
+				#if IS_DEBUGGING
+//				Debug.Log(strMsg);
+				#endif
+			}
+		}
+		public	void					WriteDebugLog()
+		{
+			if (_strDebugLog.Trim() != "")
+			{
+				string strFilename = "DebugLog_" + System.DateTime.Now.ToString("MMMdd-HHmmss") + ".txt";
+				Status.Status = "Writing Results to Log File (" + strFilename + ")";
+				Util.WriteTextFile("Debug Logs", strFilename, _strDebugLog);
+				_strDebugLog = "";
+			}
+		}
+		public	void					DebugLogButtonVisibility(int intShow = -1)
+		{
+			if (WriteErrorLogButton != null)
+					WriteErrorLogButton.gameObject.SetActive( (intShow != 0) && (GameBuildType < ((int)ApplicationManager.DevPhases.Release) ));
+		}
+		public	void					ResetScreenSize()
+		{
+			Screen.fullScreen = false;
+			Screen.SetResolution((int)DEFAULT_WIDTH, (int)DEFAULT_HEIGHT, false);
+		}
 
 	#endregion
 
@@ -433,6 +590,9 @@ public	partial	class	ApplicationManager : MonoBehaviour
 			#if USES_NETWORKMANAGER
 			_nwm = AppNetworkManager.Instance;
 			#endif
+
+			// LOAD APPLICATION SETTINGS
+			LoadApplicationSettings();
 
 			if (MaxFPS > 0)
 				Application.targetFrameRate = MaxFPS;
@@ -463,21 +623,22 @@ public	partial	class	ApplicationManager : MonoBehaviour
 			#if USES_NETWORKMANAGER
 			if (Net != null && !Net.ForceOffline)
 			{
-				if (Net.UsesMatchMaking)
-					Net.StartMatchMaking();
-				else if (Net.IsServer || Net.IsHost)
+//			if (Net.UsesMatchMaking)
+//				Net.StartMatchMaking();
+//			else 
+				if (Net.IsServer || Net.IsHost)
 					StartCoroutine(DoServerStart());
 				else
 					PanelManager.Instance.ShowConnectPanel();
 			}
 			#endif
 		}
-		private IEnumerator			DoServerStart()
+		public	IEnumerator			DoServerStart()
 		{
-			// WAIT FOR DATABASE TO BE CONNECTED
 			yield return new WaitForSeconds(0.2f);
 
 			#if USES_DATABASEMANAGER
+			// WAIT FOR DATABASE TO BE CONNECTED
 			if (Database != null)
 			{
 				int i = 0;
@@ -495,9 +656,9 @@ public	partial	class	ApplicationManager : MonoBehaviour
 			{
 				if (Net.ServerAlsoPlays)
 				{
-					if (Net.UsesMatchMaking)
-						Net.StartMatchHost(this.GameName, "");		// NO PASSWORD
-					else
+//				if (Net.UsesMatchMaking)
+//					Net.StartMatchHost(this.GameName, "");		// NO PASSWORD
+//				else
 						Net.HostStart();
 				} else	
 					Net.ServerStart();

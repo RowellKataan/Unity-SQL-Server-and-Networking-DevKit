@@ -119,7 +119,7 @@ public class CharacterMovement : NetworkBehaviour
 			if (PlayerModel == null)
 					PlayerModel = transform.GetChild(0).gameObject;
 			PlayerModel.GetComponent<MeshRenderer>().material.color = Color.yellow;
-			App.GameUserObject = this.gameObject;
+			App.UserObj = this.gameObject;
 			if (Net.IsClient)
 			{
 

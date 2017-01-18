@@ -1,0 +1,10 @@
+//--DEVELOPMENT DATABASE SERVER
+server=MICHAELMARZILLI
+database=UnityDatabase
+username=UnityUser
+password=abcABC123!@#
+
+retries=10
+cmdcount=10
+charcount=2500
+savedelay=0

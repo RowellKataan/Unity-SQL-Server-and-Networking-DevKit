@@ -171,8 +171,8 @@ public class ServerInfoUI : MonoBehaviour
 
 		public	void			ServerConnectButtonOnClick()
 		{
-			if (Net != null && !Net.IsConnected)
-				Net.JoinMatch(  (NetworkID)this.ServerNetworkID, ServerPasswordInputField.GetComponent<InputField>().text);
+//		if (Net != null && !Net.IsConnected)
+//			Net.JoinMatch(  (NetworkID)this.ServerNetworkID, ServerPasswordInputField.GetComponent<InputField>().text);
 		}
 
 	#endregion

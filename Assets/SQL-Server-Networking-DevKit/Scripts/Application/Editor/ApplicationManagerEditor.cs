@@ -1,8 +1,11 @@
 ﻿
+
 #define USES_NETWORKMANAGER
 
 using UnityEngine;
 using UnityEditor;
+using UnityEngine.UI;
+using UnityEditor.SceneManagement;
 using System.Collections;
 
 [CustomEditor(typeof(ApplicationManager))]
@@ -46,6 +49,7 @@ public class ApplicationManagerEditor : Editor
 			intVer[2]++;
 
 			app.GameVersion = intVer[0].ToString() + "." + intVer[1].ToString().PadLeft(2, '0') + "." + intVer[2].ToString().PadLeft(5, '0');
+			EditorUtility.SetDirty(app);
 		}
 
 	#endregion
@@ -85,8 +89,6 @@ public class ApplicationManagerEditor : Editor
 					IncreaseVersion(myTarget, false, false, true);
 				EditorGUILayout.EndHorizontal();
 
-				myTarget.MaxFPS							= EditorGUILayout.IntField("Max FPS", myTarget.MaxFPS);
-				myTarget.MaxFPS							= Mathf.Clamp(myTarget.MaxFPS, 10, 240);
 				myTarget.GameObjectPrefab		= (GameObject)EditorGUILayout.ObjectField("Game Prefab", myTarget.GameObjectPrefab, typeof(GameObject), true);
 
 				if (intSaveCls != (int) myTarget.AppClassification || intSaveDev != myTarget.GameBuildType)
@@ -111,14 +113,18 @@ public class ApplicationManagerEditor : Editor
 			if (blnShowPlayerObjs)
 			{
 				myTarget.PlayerPrefab			= (GameObject)EditorGUILayout.ObjectField("Player Prefab",			myTarget.PlayerPrefab,		typeof(GameObject), true);
+				myTarget.WorldObject			= (GameObject)EditorGUILayout.ObjectField("World Container",		myTarget.WorldObject,			typeof(GameObject), true);
+				myTarget.WriteErrorLogButton	= (Button)EditorGUILayout.ObjectField("Write Log Button",		myTarget.WriteErrorLogButton, typeof(Button), true);
 				#if USES_NETWORKMANAGER
-				if (!Application.isPlaying && AppNetworkManager.Instance != null)
 				AppNetworkManager.Instance.playerPrefab = myTarget.PlayerPrefab;
 				#endif
 			}
 
 			if (GUI.changed)
+			{ 
 				EditorUtility.SetDirty(myTarget);
+				EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
+			}
 
 		}
 	}

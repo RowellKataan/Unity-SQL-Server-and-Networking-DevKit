@@ -28,13 +28,20 @@ public class DatabaseManager : MonoBehaviour
 
 	#region "PRIVATE CONSTANTS"
 
-		private float								CONNECTION_TIMEOUT		= 10.00f;
+		private float								CONNECTION_TIMEOUT			= 10.00f;
+
+		// SQL CONSTANTS (WHEN SAVING BULK RECORDS)													// LOWEST VALUES (SLOWEST, MORE DELIBERATE/SAFE)
+		private const int						_MAX_SQL_RETRIES				= 10;
+		private const int						_MAX_SQL_SAVE_CMDS			= 10;						//	10
+		private const int						_MAX_SQL_CHAR_COUNT			= 2500;					//	1000
+		private const int						SQL_CONNECTION_TIMEOUT	= 600;
 
 	#endregion
 
 	#region "PUBLIC CONSTANTS"
 
 		public	float								QUERY_TIMEOUT					=  5.00f;
+		public	int									SQL_COMMAND_TIMEOUT		= 600;
 
 	#endregion
 
@@ -58,11 +65,19 @@ public class DatabaseManager : MonoBehaviour
 		// DEFINE CLASS STATUS VARIABLES
 		private bool								_blnInitialized					= false;
 		private bool								_blnProcessing					= false;
+		private bool								_blnDBisReadIn					= false;
 		private ClsDAL							_DAL										= null;
 
 		// DEFINE RESPONSE VARIABLES
 		private string							_strDBresponse					= "";
 		private DataTable						_dtDBresponse;
+
+		// SQL PROCESSING LIMIT VARIABLES
+		private		int								_sql_retries						= 0;
+		private		int								_sql_save_cmds					=	0;
+		private		int								_sql_char_cnt						= 0;
+		private		float							_sql_save_delay					= 0.002f;
+		private		string						_settingsFileLocation		=	"";
 
 	#endregion
 
@@ -130,7 +145,8 @@ public class DatabaseManager : MonoBehaviour
 		public	string										DBuser;
 		public	string										DBpassword;
 		public	bool											DBuseWindowsAccount	= false;
-		public	TextAsset									DBtextFile	= null;
+		public	TextAsset									DBtextFile					= null;
+		public	string										DBsettingsFile			= "";
 
 		public	ClsDAL										DAL
 		{
@@ -179,6 +195,20 @@ public class DatabaseManager : MonoBehaviour
 				return _blnInitialized;
 			}
 		}
+		public	bool											IsOnline
+		{
+			get
+			{
+				return DAL != null && DAL.IsOnline;
+			}
+		}
+		public	bool											IsConnectionFailed
+		{
+			get
+			{
+				return _DAL == null || DAL.IsConnectionFailed;
+			}
+		}
 		public	bool											IsConnected
 		{
 			get
@@ -205,21 +235,71 @@ public class DatabaseManager : MonoBehaviour
 		{
 			get
 			{
-				return _blnProcessing;
+				return _blnProcessing || DAL.IsProcessing;
 			}
 		}
 		public	bool											ClientsCanUse
 		{
 			get
 			{
-				#if UNITY_WEBGL
-				return false;
-				#endif
 				return _blnClientCanUse;
 			}
 			set
 			{
 				_blnClientCanUse = value;
+			}
+		}
+
+		public	int												MAX_SQL_RETRIES
+		{
+			get
+			{
+				if (_sql_retries == 0)
+						_sql_retries = _MAX_SQL_RETRIES;
+				return _sql_retries;
+			}
+			set
+			{
+				_sql_retries = value;
+			}
+		}
+		public	int												MAX_SQL_SAVE_CMDS
+		{
+			get
+			{
+				if (_sql_save_cmds == 0)
+						_sql_save_cmds = _MAX_SQL_SAVE_CMDS;
+				return _sql_save_cmds;
+			}
+			set
+			{
+				_sql_save_cmds = value;
+			}
+		}
+		public	int												MAX_SQL_CHAR_COUNT
+		{
+			get
+			{
+				if (_sql_char_cnt == 0)
+						_sql_char_cnt = _MAX_SQL_CHAR_COUNT;
+				return _sql_char_cnt;
+			}
+			set
+			{
+				_sql_char_cnt = value;
+			}
+		}
+		public	float											SQL_SAVE_DELAY
+		{
+			get
+			{
+				return _sql_save_delay;
+			}
+			set
+			{
+				_sql_save_delay = value;
+				if (_sql_save_delay < 0)
+						_sql_save_delay = 0;
 			}
 		}
 
@@ -256,15 +336,24 @@ public class DatabaseManager : MonoBehaviour
 
 				if (!blnCont)
 				{
-					#if IS_DEBUGGING
-					Debug.LogError("Unable to Connect to Database.");
-					#endif
 					#if USES_STATUSMANAGER
 					Status.Status = "Unable to Connect to Database.";
 					#endif
-				} else 
+				} else {
 					_blnInitialized = true;
+				}
+
+				if (!KeepConnectionOpen)
+				{
+					// WAIT FOR THE CONNECTION TO COMPLETE, THEN CLOSE IT
+					yield return new WaitForSeconds(1.2f);
+					CloseDatabase();
+				}
 			}
+			yield return new WaitForSeconds(1.5f);
+			#if USES_STATUSMANAGER
+			Status.UpdateStatus();
+			#endif
 			yield return null;
 		}
 
@@ -283,6 +372,10 @@ public class DatabaseManager : MonoBehaviour
 
 		public	void										OpenDatabase()
 		{
+				#if USES_STATUSMANAGER
+				Status.UpdateStatus();
+				#endif
+
 				if (!IsServer && !ClientsCanUse)
 					return;
 
@@ -290,58 +383,150 @@ public class DatabaseManager : MonoBehaviour
 					return;
 
 				// CHECK FOR SETTINGS FROM TEXT FILE
+				bool			blnOkayToProcessTextFile	= false;
+				bool			blnCouldClientLogIn				= _blnClientCanUse;
+				string[]	strLines = null;
+				
+				// FORCE THE CONFIGURATION FILE THROUGH
+				DBsettingsFile = "";
 				if (DBtextFile != null)
+					DBsettingsFile = DBtextFile.name + ".txt";
+
+				if (!_blnDBisReadIn && DBsettingsFile != "")
 				{
-					DBport = 0;
-					string[] strLines = DBtextFile.text.Split('\n');
-					if (strLines.Length > 0)
+					if (!Util.FileExists("", DBsettingsFile))
 					{
-						foreach(string st in strLines)
+						#if USES_STATUSMANAGER
+						Status.Status			= "Unable to find file \"" + DBsettingsFile + "\".";
+						#endif
+						_blnClientCanUse	= false;
+					} else {
+						strLines = Util.ReadTextFile("", DBsettingsFile).Split('\n');
+						blnOkayToProcessTextFile = strLines != null && strLines.Length > 0;
+						#if USES_STATUSMANAGER
+						Status.Status = DBsettingsFile + " found. " + strLines.Length.ToString() + " lines Read In.";
+						#endif
+					}
+
+					if (DBtextFile != null && !blnOkayToProcessTextFile)
+					{
+						strLines = DBtextFile.text.Split('\n');
+						blnOkayToProcessTextFile = strLines.Length > 0;
+					}
+
+					if (blnOkayToProcessTextFile)
+					{
+						DBport = 0;
+						if (strLines.Length > 0)
 						{
-							if (!st.StartsWith("//") && st.Trim() != "" && st.Contains("="))
-							{ 
-								string[] s = st.Trim().Split('=');
-								switch (s[0].Trim().ToLower())
+							foreach (string st in strLines)
+							{
+								if (!st.StartsWith("//") && st.Trim() != "" && st.Contains("="))
 								{
-									case "server":
-										DBserver = s[1].Trim();
-										break;
-									case "database":
-										DBdatabase = s[1].Trim();
-										break;
-									case "username":
-										DBuser = s[1].Trim();
-										break;
-									case "password":
-										DBpassword = s[1].Trim();
-										break;
-									case "port":
-										try { DBport = int.Parse(s[1].Trim()); } catch { DBport = 0; }
-										break;
+									string[] s = st.Trim().Split('=');
+									if (s.Length > 2)
+									{
+										for (int i = 2; i < s.Length; i++)
+										s[1] += "=" + s[i];
+									}
+									switch (s[0].Trim().ToLower())
+									{
+										case "server":
+											DBserver = s[1].Trim();
+											break;
+										case "database":
+											DBdatabase = s[1].Trim();
+											break;
+										case "username":
+											DBuser = Crypto.Decrypt(s[1].Trim());
+											if (DBuser == "")
+													DBuser = s[1].Trim();
+											break;
+										case "password":
+											DBpassword = Crypto.Decrypt(s[1].Trim());
+											if (DBpassword == "")
+													DBpassword = s[1].Trim();
+											break;
+										case "port":
+											try { DBport = int.Parse(s[1].Trim()); }
+											catch { DBport = 0; }
+											break;
+										case "retries":
+											try { MAX_SQL_RETRIES = int.Parse(s[1].Trim()); }
+											catch { MAX_SQL_RETRIES = 0; }
+											break;
+										case "cmdcount":
+											try { MAX_SQL_SAVE_CMDS = int.Parse(s[1].Trim()); }
+											catch { MAX_SQL_SAVE_CMDS = 0; }
+											break;
+										case "charcount":
+											try { MAX_SQL_CHAR_COUNT = int.Parse(s[1].Trim()); }
+											catch { MAX_SQL_CHAR_COUNT = 0; }
+											break;
+										case "savedelay":
+											try { SQL_SAVE_DELAY = float.Parse(s[1].Trim()); }
+											catch { SQL_SAVE_DELAY = 0; }
+											break;
+									}
 								}
 							}
 						}
+						DBuseWindowsAccount = (DBuser == "" && DBpassword == "");
 					}
-					DBuseWindowsAccount = (DBuser == "" && DBpassword == "");
+					_blnDBisReadIn = true;
 				}
 
-				if (DBserver.Trim() != "" && DBdatabase.Trim() != "" && ((DBuser.Trim() != "" && DBpassword.Trim() != "") || DBuseWindowsAccount))
+				try
 				{
-					if (DBuseWindowsAccount)
-						DAL.OpenConnection(DBserver, DBdatabase, DBport);
-					else
-						DAL.OpenConnection(DBserver, DBdatabase, DBuser, DBpassword, DBport);
-					_blnInitialized = true;
-				} else {
-					#if IS_DEBUGGING
-					Debug.LogWarning("-- Missing Database Connection Information.");	
+					if (DBserver.Trim() != "" && DBdatabase.Trim() != "" && ((DBuser.Trim() != "" && DBpassword.Trim() != "") || DBuseWindowsAccount))
+					{
+						if (!_blnClientCanUse)
+								 _blnClientCanUse = blnCouldClientLogIn;
+						if (DBuseWindowsAccount)
+							DAL.OpenConnection(DBserver, DBdatabase, DBport);
+						else
+						{
+							string strUSR = Crypto.Decrypt(DBuser);
+							string strPWD = Crypto.Decrypt(DBpassword);
+							strUSR = (strUSR == "") ? DBuser : strUSR;
+							strPWD = (strPWD == "") ? DBpassword : strPWD;
+							DAL.OpenConnection(DBserver, DBdatabase, strUSR, strPWD, DBport);
+						}
+						_blnInitialized = true;
+						if (DAL.IsConnectedCheck)
+						{
+							#if USES_STATUSMANAGER
+							Status.Status = "Unable to Connect to the Database.";
+							Status.UpdateStatus();
+							#endif
+							_blnClientCanUse = false;
+						}
+					} else {
+						#if IS_DEBUGGING
+						#if USES_APPLICATIONMANAGER
+						App.AddToDebugLog("-- Missing Database Connection Information.");	
+						#endif
+						#endif
+					}
+				} catch {
+					#if USES_STATUSMANAGER
+					Status.Status = "Unable to Connect to the Database.";
+					Status.UpdateStatus();
 					#endif
+					_blnClientCanUse = false;
 				}
+
+				#if USES_STATUSMANAGER
+				Status.UpdateStatus();
+				#endif
 		}
 		public	void										CloseDatabase()
 		{
 			if (_DAL != null && _DAL.IsConnectedCheck)
 					_DAL.CloseConnection();
+			#if USES_STATUSMANAGER
+			Status.UpdateStatus();
+			#endif
 		}
 		public	void										DisposeDatabase()
 		{
@@ -410,9 +595,11 @@ public class DatabaseManager : MonoBehaviour
 				yield return _strDBresponse;
 			} else {
 				#if IS_DEBUGGING
-				Debug.LogWarning("Database not connected");
-				Debug.LogWarning("Queries:\n" + DAL.SQLqueries);
-				Debug.LogWarning("Errors:\n" + DAL.Errors);
+				#if USES_APPLICATIONMANAGER
+				App.AddToDebugLog("Database not connected");
+				App.AddToDebugLog("Queries:\n" + DAL.SQLqueries);
+				App.AddToDebugLog("Errors:\n" + DAL.Errors);
+				#endif
 				#endif
 				_strDBresponse = "";
 			}
@@ -459,9 +646,11 @@ public class DatabaseManager : MonoBehaviour
 				yield return _strDBresponse;
 			} else {
 				#if IS_DEBUGGING
-				Debug.LogWarning("Database not connected");
-				Debug.LogWarning("Queries:\n" + DAL.SQLqueries);
-				Debug.LogWarning("Errors:\n" + DAL.Errors);
+				#if USES_APPLICATIONMANAGER
+				App.AddToDebugLog("Database not connected");
+				App.AddToDebugLog("Queries:\n" + DAL.SQLqueries);
+				App.AddToDebugLog("Errors:\n" + DAL.Errors);
+				#endif
 				#endif
 				_strDBresponse = "";
 			}
@@ -509,9 +698,11 @@ public class DatabaseManager : MonoBehaviour
 				yield return _dtDBresponse;
 			} else {
 				#if IS_DEBUGGING
-				Debug.LogWarning("Database not connected");
-				Debug.LogWarning("Queries:\n" + DAL.SQLqueries);
-				Debug.LogWarning("Errors:\n" + DAL.Errors);
+				#if USES_APPLICATIONMANAGER
+				App.AddToDebugLog("Database not connected");
+				App.AddToDebugLog("Queries:\n" + DAL.SQLqueries);
+				App.AddToDebugLog("Errors:\n" + DAL.Errors);
+				#endif
 				#endif
 				_strDBresponse	= "";
 				_dtDBresponse		= null;
@@ -558,9 +749,11 @@ public class DatabaseManager : MonoBehaviour
 				yield return _strDBresponse;
 			} else {
 				#if IS_DEBUGGING
-				Debug.LogWarning("Database not connected");
-				Debug.LogWarning("Queries:\n" + DAL.SQLqueries);
-				Debug.LogWarning("Errors:\n" + DAL.Errors);
+				#if USES_APPLICATIONMANAGER
+				App.AddToDebugLog("Database not connected");
+				App.AddToDebugLog("Queries:\n" + DAL.SQLqueries);
+				App.AddToDebugLog("Errors:\n" + DAL.Errors);
+				#endif
 				#endif
 				_strDBresponse = "";
 			}
@@ -611,9 +804,11 @@ public class DatabaseManager : MonoBehaviour
 				yield return _dtDBresponse;
 			} else {
 				#if IS_DEBUGGING
-				Debug.LogWarning("Database not connected");
-				Debug.LogWarning("Queries:\n" + DAL.SQLqueries);
-				Debug.LogWarning("Errors:\n" + DAL.Errors);
+				#if USES_APPLICATIONMANAGER
+				App.AddToDebugLog("Database not connected");
+				App.AddToDebugLog("Queries:\n" + DAL.SQLqueries);
+				App.AddToDebugLog("Errors:\n" + DAL.Errors);
+				#endif
 				#endif
 				_strDBresponse	= "";
 				_dtDBresponse		= null;
@@ -642,7 +837,7 @@ public class DatabaseManager : MonoBehaviour
 			clock = null;
 			if (!blnDone)
 					_strDBresponse = "";
-			Debug.Log("My 1 Total Users=" + _strDBresponse);
+			App.AddToDebugLog("My 1 Total Users=" + _strDBresponse);
 
  
 			// STORED PROCEDURE
@@ -661,7 +856,7 @@ public class DatabaseManager : MonoBehaviour
 			if (!blnDone)
 					_dtDBresponse = null;
 			if (_dtDBresponse != null)
-					Debug.Log("My 2 Total Users=" + _dtDBresponse.Rows.Count.ToString());
+					App.AddToDebugLog("My 2 Total Users=" + _dtDBresponse.Rows.Count.ToString());
 
  
 			// DIRECT APPROACH
@@ -671,11 +866,11 @@ public class DatabaseManager : MonoBehaviour
 			{
 				DAL.ClearParams();
 				string st = DAL.GetSQLSelectInt("SELECT COUNT(*) FROM tblUser").ToString();
-				Debug.Log("Total Users = " + st);
+				App.AddToDebugLog("Total Users = " + st);
 			} else {
-				Debug.Log("Not connected");
-				Debug.Log("Queries:\n" + DAL.SQLqueries);
-				Debug.Log("Errors:\n" + DAL.Errors);
+				App.AddToDebugLog("Not connected");
+				App.AddToDebugLog("Queries:\n" + DAL.SQLqueries);
+				App.AddToDebugLog("Errors:\n" + DAL.Errors);
 			}
 			DAL.CloseConnection();
 */

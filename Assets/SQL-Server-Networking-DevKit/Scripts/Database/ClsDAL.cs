@@ -16,17 +16,14 @@
 	#undef		IS_DEBUGGING
 #endif
 
+#define	USES_APPLICATIONMANAGER		// #define = Scene has an ApplicationManager Prefab,	#undef = Scene does not have an ApplicationManager Prefab
+#define	USES_STATUSMANAGER				// #define = Scene has a  StatusManager Prefab,				#undef = Scene does not have a  StatusManager Prefab
+
 // REFERENCE DECLARATIONS
 using System;
-using System.IO;
 using System.Collections;
-using System.Collections.Generic;
-using System.Collections.Specialized;
-using System.Configuration;
 using System.Data;
-using System.Data.Common;
 using System.Data.SqlClient;
-using System.Security;
 
 public class ClsDAL
 {
@@ -34,7 +31,7 @@ public class ClsDAL
 	#region "PRIVATE CONSTANTS"
 
 		private int			CONNECTION_TIMEOUT		= 8;
-		private int			QUERY_TIMEOUT					= 5;
+		private int			QUERY_TIMEOUT					= 600;
 
 	#endregion
 
@@ -50,6 +47,7 @@ public class ClsDAL
 		private bool		_blnIsConnecting				= false;
 		private bool		_blnIsProcessing				= false;
 		private bool		_blnIsDisposed					= false;
+		private bool		_blnIsFailed						= false;
 
 		// SQL SERVER/DATABASE INFORMATION
 		private bool		_blnUseWindowsAccount		= false;
@@ -223,6 +221,35 @@ public class ClsDAL
 					return _strServerIPaddress + "," + _intDBport.ToString();
 			}
 		}
+		public	bool		IsOnline
+		{
+			get
+			{
+				return _blnIsOnline;
+			}
+		}
+		public	bool		IsConnectionFailed
+		{
+			get
+			{
+				return _blnIsFailed;
+			}
+		}
+		public	bool		IsProcessing
+		{
+			get
+			{
+				return _blnIsProcessing;
+			}
+		}
+
+		public	SqlConnection			Connection
+		{
+			get
+			{
+				return _sqlConn;
+			}
+		}
 
 	#endregion
 
@@ -251,11 +278,13 @@ public class ClsDAL
 							StopQueryTimer();
 							_blnIsConnecting	= false;
 							_blnIsOnline			= false;
+							_blnIsFailed			= true;
 						}
 					}
 					private IEnumerator		SQLOpenConnectionEnum()
 					{
 						_blnIsOnline			= false;
+						_blnIsFailed			= false;
 						_blnIsConnecting	= true;
 
 						if (_sqlConn == null) 
@@ -271,10 +300,11 @@ public class ClsDAL
 								case ConnectionState.Closed:
 									_sqlConn.Dispose();
 									_sqlConn = new SqlConnection(SQLConnectionString);
-									try {  _sqlConn.Open(); } catch (System.Exception ex) { 
-										#if IS_DEBUGGING
-										UnityEngine.Debug.LogError("The Database does not Exist. (" + SQLConnectionString + ")\n" + _strErrors);
-										#endif
+									try 
+									{  
+										_sqlConn.Open(); 
+									} catch (System.Exception ex) { 
+										_blnIsFailed = true;
 										ReportError("ClsDAL", "SQLOpenConnectionEnum", "The Database does not Exist", ex);
 									}
 									break;
@@ -294,6 +324,11 @@ public class ClsDAL
 						clock.StopTimer();
 						_sqlConn.StateChange += OnSQLstateChanged;
 						_blnIsConnecting	= false;
+						_blnIsFailed			= !_blnIsOnline;
+						#if USES_STATUSMANAGER
+						if (StatusManager.Instance != null)
+								StatusManager.Instance.UpdateStatus();
+						#endif
 					}
 					private void					SQLOpenConnection(string strServer, string strDB, int intPort = 0)
 					{
@@ -332,12 +367,16 @@ public class ClsDAL
 							_sqlConn.Close();
 							_sqlConn.Dispose();
 						}
+						#if USES_STATUSMANAGER
+						if (StatusManager.Instance != null)
+								StatusManager.Instance.UpdateStatus();
+						#endif
 					}
 					private bool					SQLisConnected
 					{
 						get
 						{
-							if (!_blnIsConnecting)
+							if (!_blnIsConnecting && (_sqlConn == null || _sqlConn.State == ConnectionState.Broken || _sqlConn.State == ConnectionState.Closed))
 							{ 
 								if (_sqlConn == null)
 								{
@@ -353,6 +392,10 @@ public class ClsDAL
 							_blnIsOnline = (_sqlConn != null && _sqlConn.State != ConnectionState.Broken && _sqlConn.State != ConnectionState.Closed && !_blnIsConnecting);
 							if (_blnIsOnline)
 								StartQueryTimer();
+							#if USES_STATUSMANAGER
+							if (StatusManager.Instance != null)
+								StatusManager.Instance.UpdateStatus();
+							#endif
 							return _blnIsOnline;
 						}
 					}
@@ -367,8 +410,10 @@ public class ClsDAL
 					private void					OnSQLstateChanged(object conn, System.Data.StateChangeEventArgs e)
 					{
 						_blnIsOnline = (_sqlConn != null && _sqlConn.State != ConnectionState.Broken && _sqlConn.State != ConnectionState.Closed && !_blnIsConnecting);
+						#if USES_STATUSMANAGER
 						if (StatusManager.Instance != null)
 								StatusManager.Instance.UpdateStatus();
+						#endif
 					}
 
 		#endregion
@@ -617,7 +662,7 @@ public class ClsDAL
 							{
 								_sqlComm = new SqlCommand(strSQL, _sqlConn);
 							}
-							_sqlComm.CommandTimeout = 10;
+							_sqlComm.CommandTimeout = QUERY_TIMEOUT;
 							try 
 							{
 								strRet = _sqlComm.ExecuteScalar().ToString(); 
@@ -710,7 +755,9 @@ public class ClsDAL
 							return blnRet;
 
 						_sqlComm = _sqlConn.CreateCommand();
-						_sqlComm.CommandText = strSQL;
+						_sqlComm.CommandText		= strSQL;
+						_sqlComm.CommandTimeout = QUERY_TIMEOUT;
+
 						try
 						{
 							blnRet = (_sqlComm.ExecuteNonQuery() > 0);
@@ -745,6 +792,7 @@ public class ClsDAL
 							{
 								command.CommandType = CommandType.StoredProcedure;
 								command.CommandText = strSP;
+								command.CommandTimeout	= QUERY_TIMEOUT;
 
 								foreach (SqlParameter aPa in _SQLSPparams)
 								{
@@ -780,6 +828,7 @@ public class ClsDAL
 								string strParamName = "";
 								_sqlComm.CommandType = CommandType.StoredProcedure;
 								_sqlComm.CommandText = strSP;
+								_sqlComm.CommandTimeout	= QUERY_TIMEOUT;
 
 								foreach (SqlParameter sqlpar in _SQLSPparams)
 								{
@@ -891,6 +940,7 @@ public class ClsDAL
 							{
 								_sqlComm.CommandType = CommandType.StoredProcedure;
 								_sqlComm.CommandText = strSP;
+								_sqlComm.CommandTimeout	= QUERY_TIMEOUT;
 
 								foreach (SqlParameter aPa in _SQLSPparams)
 								{
@@ -923,8 +973,9 @@ public class ClsDAL
 							_sqlComm = new SqlCommand(strSP, _sqlConn);
 							using (_sqlConn)
 							{
-								_sqlComm.CommandType = CommandType.StoredProcedure;
-								_sqlComm.CommandText = strSP;
+								_sqlComm.CommandType		= CommandType.StoredProcedure;
+								_sqlComm.CommandText		= strSP;
+								_sqlComm.CommandTimeout = QUERY_TIMEOUT;
 
 								foreach (SqlParameter aPa in _SQLSPparams)
 								{
@@ -961,6 +1012,7 @@ public class ClsDAL
 							{
 								_sqlComm.CommandType = CommandType.StoredProcedure;
 								_sqlComm.CommandText = strSP;
+								_sqlComm.CommandTimeout	= QUERY_TIMEOUT;
 
 								foreach (SqlParameter aPa in _SQLSPparams)
 								{
@@ -999,6 +1051,7 @@ public class ClsDAL
 							{
 								_sqlComm.CommandType = CommandType.StoredProcedure;
 								_sqlComm.CommandText = strSP;
+								_sqlComm.CommandTimeout	= QUERY_TIMEOUT;
 
 								foreach (SqlParameter aPa in _SQLSPparams)
 								{
@@ -1038,6 +1091,7 @@ public class ClsDAL
 							{
 								_sqlComm.CommandType = CommandType.StoredProcedure;
 								_sqlComm.CommandText = strSP;
+								_sqlComm.CommandTimeout	= QUERY_TIMEOUT;
 
 								foreach (SqlParameter aPa in _SQLSPparams)
 								{
@@ -1066,58 +1120,83 @@ public class ClsDAL
 
 		#region "BULKCOPY / INSERT"
 
-					private bool		SQLBulkCopier(string strTableName, DataTable dtTable)
+					private IEnumerator		SQLBulkCopier(string strTableName, DataTable dtTable)
 					{
-						if (!SQLisConnected)
-							return false;
+						_blnIsProcessing = true;
 
-						try
-						{ 
-							using (var tran = _sqlConn.BeginTransaction(IsolationLevel.ReadCommitted))
+						UnityEngine.Debug.Log("Inside the SQLBulkCopier (" + strTableName + ")! " + DateTime.Now.ToString());
+						
+						bool blnWriteSuccess	= true;
+						if (IsConnected)
+						{
+							using (SqlBulkCopy bulkCopy = new SqlBulkCopy(_sqlConn))
 							{
-								using (var bulkCopy = new SqlBulkCopy(_sqlConn, SqlBulkCopyOptions.Default, tran))
+								bulkCopy.DestinationTableName	= "dbo." + strTableName;
+				        bulkCopy.SqlRowsCopied			 += new SqlRowsCopiedEventHandler(SQLRowsCopied);
+								bulkCopy.BulkCopyTimeout			= QUERY_TIMEOUT; // in seconds
+								bulkCopy.BatchSize						= 100;
+								bulkCopy.NotifyAfter					= 100;
+								try
 								{
-									bulkCopy.DestinationTableName = strTableName;
-									bulkCopy.BulkCopyTimeout = 1200; // in seconds
-//								bulkCopy.ColumnMappings.Add("...", "...");
-									bulkCopy.WriteToServer(dtTable);
-									tran.Commit();
-									return true;
-
+									bulkCopy.WriteToServer(dtTable, DataRowState.Modified);
+								} catch {
+									blnWriteSuccess = false;
 								}
 							}
-
-						} catch (Exception ex) {
-							_strErrors = ex.Message + "\n" + ex.InnerException + "\n" + ex.StackTrace;
+						}
+							
+						if (!blnWriteSuccess)
+						{
+							if (IsConnected)
+							{
+								SqlCommand	command = _sqlConn.CreateCommand();
+								SqlTransaction tran = _sqlConn.BeginTransaction();
+								command.Transaction = tran;
+								string strStart		= "INSERT INTO " + strTableName + " ";
+								string strFields	= "";
+								for (int i = 0; i < dtTable.Columns.Count; i++)
+									strFields += "," + dtTable.Columns[i].ColumnName;
+								strFields = "(" + strFields.Substring(1) + ") VALUES (";
+								for (int i = 0; i < dtTable.Rows.Count; i++)
+								{
+									string strData = "";
+									for (int d = 0; d < dtTable.Columns.Count; d++)
+									{
+										if (dtTable.Columns[d].DataType == typeof(string)||
+												dtTable.Columns[d].DataType == typeof(DateTime))
+												strData += ",'" + dtTable.Rows[i][d].ToString() + "'";
+										else
+												strData += "," + dtTable.Rows[i][d].ToString();
+									}
+									strData = strData.Substring(1) + ")";
+									command.CommandText = strStart + strFields + strData;
+									command.ExecuteNonQuery();
+								}
+								yield return null;
+								UnityEngine.Debug.Log("Start Commit (" + dtTable.Rows.Count.ToString() + " Rows) " + DateTime.Now.ToString());
+								yield return null;
+								try
+								{
+									tran.Commit();
+								} catch (Exception ex) { 
+									ReportError("ClsDAL", "SQLBulkCopier", "", ex);
+									tran.Rollback();
+								}
+							} else {
+								_strErrors = "NOT CONNECTED!";
+							}
 						}
 
-/*
-						SqlBulkCopy bulkCopy = new SqlBulkCopy(sqlConn);
-//												(
-//												sqlConn,
-//												SqlBulkCopyOptions.TableLock |
-//												SqlBulkCopyOptions.FireTriggers |
-//												SqlBulkCopyOptions.UseInternalTransaction,
-//												null
-//												);
-						bulkCopy.BulkCopyTimeout = 1200; // in seconds
-						bulkCopy.DestinationTableName = "dbo." + strTableName;
-						try
-						{ 
-							bulkCopy.WriteToServer(dtTable);
-							return true;
-						} catch (Exception ex) {
-							strErrors = ex.Message + "\n" + ex.InnerException + "\n" + ex.StackTrace;
-							return false;
-						}
-*/
+						_blnIsProcessing = false;
 
 						if (KeepConnectionOpen)
 							StopQueryTimer();
 						else
 							SQLCloseConnection();
-
-						return false;
+					}
+					static	void		SQLRowsCopied(object sender, SqlRowsCopiedEventArgs e)
+					{
+						Console.WriteLine("-- Copied {0} rows.", e.RowsCopied);
 					}
 					private bool		SQLInsertFromDataTable(string strSP, string strDataType, DataTable dtTable)
 					{
@@ -1308,14 +1387,23 @@ public class ClsDAL
 				#endif
 
 				SQLOpenConnection();
+				#if USES_STATUSMANAGER
+				StatusManager.Instance.UpdateStatus();
+				#endif
 			}
 			public void OpenConnection(string strServer, string strDB, int intPort = 0)
 			{
 				SQLOpenConnection(strServer, strDB, intPort);
+				#if USES_STATUSMANAGER
+				StatusManager.Instance.UpdateStatus();
+				#endif
 			}
 			public void OpenConnection(string strServer, string strDB, string strUser, string strPwd, int intPort = 0)
 			{
 				SQLOpenConnection(strServer, strDB, strUser, strPwd, intPort);
+				#if USES_STATUSMANAGER
+				StatusManager.Instance.UpdateStatus();
+				#endif
 			}
 
 			public void CloseConnection()
@@ -1325,19 +1413,22 @@ public class ClsDAL
 				#endif
 
 				SQLCloseConnection();
+				#if USES_STATUSMANAGER
+				StatusManager.Instance.UpdateStatus();
+				#endif
 			}
 			public bool IsConnected
 			{
 				get
 				{
-					return SQLisConnected;
+					return SQLisConnected && !IsConnectionFailed;
 				}
 			}
 			public bool IsConnectedCheck
 			{
 				get
 				{
-					return _blnIsOnline;
+					return _blnIsOnline && !IsConnectionFailed;
 				}
 			}
 			public bool IsConnecting
@@ -1454,6 +1545,9 @@ public class ClsDAL
 				#endif
 
 				dtRet = SQLGetSQLSelectDataTable(strSQL);
+				#if USES_STATUSMANAGER
+				StatusManager.Instance.UpdateStatus();
+				#endif
 
 				return dtRet;
 			}
@@ -1466,6 +1560,9 @@ public class ClsDAL
 				#endif
 								
 				strRet = SQLGetSQLSelectString(strSQL);
+				#if USES_STATUSMANAGER
+				StatusManager.Instance.UpdateStatus();
+				#endif
 				
 				return strRet;
 			}
@@ -1478,6 +1575,9 @@ public class ClsDAL
 				#endif
 								
 				intRet = SQLGetSQLSelectInt(strSQL);
+				#if USES_STATUSMANAGER
+				StatusManager.Instance.UpdateStatus();
+				#endif
 
 				return intRet;
 			}
@@ -1490,6 +1590,9 @@ public class ClsDAL
 				#endif
 								
 				decRet = SQLGetSQLSelectDecimal(strSQL);
+				#if USES_STATUSMANAGER
+				StatusManager.Instance.UpdateStatus();
+				#endif
 
 				return decRet;
 			}
@@ -1502,6 +1605,9 @@ public class ClsDAL
 				#endif
 
 				fRet = SQLGetSQLSelectFloat(strSQL);
+				#if USES_STATUSMANAGER
+				StatusManager.Instance.UpdateStatus();
+				#endif
 
 				return fRet;
 			}
@@ -1514,6 +1620,9 @@ public class ClsDAL
 				#endif
 
 				dblRet = SQLGetSQLSelectDouble(strSQL);
+				#if USES_STATUSMANAGER
+				StatusManager.Instance.UpdateStatus();
+				#endif
 
 				return dblRet;
 			}
@@ -1526,6 +1635,9 @@ public class ClsDAL
 				#endif
 								
 				blnRet = SQLDoSQLUpdateDelete(strSQL);
+				#if USES_STATUSMANAGER
+				StatusManager.Instance.UpdateStatus();
+				#endif
 
 				return blnRet;
 			}
@@ -1543,6 +1655,9 @@ public class ClsDAL
 				#endif
 								
 				dtRet = SQLGetSPDataTable(strSP);
+				#if USES_STATUSMANAGER
+				StatusManager.Instance.UpdateStatus();
+				#endif
 
 				return dtRet;								
 			}
@@ -1555,7 +1670,10 @@ public class ClsDAL
 				#endif
 								
 				strRet = SQLGetSPString(strSP);
-				
+				#if USES_STATUSMANAGER
+				StatusManager.Instance.UpdateStatus();
+				#endif
+
 				return strRet;
 			}
 			public int       GetSPInt(string strSP)
@@ -1567,6 +1685,9 @@ public class ClsDAL
 				#endif
 
 				intRet = SQLGetSPInt(strSP);
+				#if USES_STATUSMANAGER
+				StatusManager.Instance.UpdateStatus();
+				#endif
 
 				return intRet;
 			}
@@ -1579,6 +1700,9 @@ public class ClsDAL
 				#endif
 
 				lngRet = SQLGetSPLong(strSP);
+				#if USES_STATUSMANAGER
+				StatusManager.Instance.UpdateStatus();
+				#endif
 
 				return lngRet;
 			}
@@ -1591,6 +1715,9 @@ public class ClsDAL
 				#endif
 
 				decRet = SQLGetSPDecimal(strSP);
+				#if USES_STATUSMANAGER
+				StatusManager.Instance.UpdateStatus();
+				#endif
 
 				return decRet;
 			}
@@ -1603,6 +1730,9 @@ public class ClsDAL
 				#endif
 
 				fRet = SQLGetSPFloat(strSP);
+				#if USES_STATUSMANAGER
+				StatusManager.Instance.UpdateStatus();
+				#endif
 
 				return fRet;
 			}
@@ -1615,6 +1745,9 @@ public class ClsDAL
 				#endif
 
 				binRet = SQLGetSPBinary(strSP);
+				#if USES_STATUSMANAGER
+				StatusManager.Instance.UpdateStatus();
+				#endif
 
 				return binRet;
 			}
@@ -1625,6 +1758,9 @@ public class ClsDAL
 				#endif
 
 				SQLExecuteSP(strSP);
+				#if USES_STATUSMANAGER
+				StatusManager.Instance.UpdateStatus();
+				#endif
 			}
 
 		#endregion
@@ -1640,6 +1776,9 @@ public class ClsDAL
 				#endif
 
 				strRet = SQLUpdateSPDataTable(strSP, strPass);
+				#if USES_STATUSMANAGER
+				StatusManager.Instance.UpdateStatus();
+				#endif
 
 				return strRet;
 			}
@@ -1652,6 +1791,9 @@ public class ClsDAL
 				#endif
 
 				intRet = SQLUpdateSPDataTable(strSP, intPass);
+				#if USES_STATUSMANAGER
+				StatusManager.Instance.UpdateStatus();
+				#endif
 
 				return intRet;
 			}
@@ -1664,6 +1806,9 @@ public class ClsDAL
 				#endif
 
 				decRet = SQLUpdateSPDataTable(strSP, decPass);
+				#if USES_STATUSMANAGER
+				StatusManager.Instance.UpdateStatus();
+				#endif
 
 				return decRet;
 			}
@@ -1672,13 +1817,15 @@ public class ClsDAL
 
 		#region "BULKCOPY / INSERT"
 
-			public bool    BulkCopy(string strTableName, DataTable dtTable)
+			public IEnumerator	BulkCopy(string strTableName, DataTable dtTable)
 			{
 				#if IS_DEBUGGING
 				_strSQLqueries += "-- BulkCopy(" + strTableName + ")\n";
 				#endif
 
-				return SQLBulkCopier(strTableName, dtTable);
+				Job.make(SQLBulkCopier(strTableName, dtTable), true);
+
+				yield return null;
 			}
 			public bool		 InsertFromDataTable(string strSP, string strDataType, DataTable dtTable)
 			{
@@ -1716,9 +1863,9 @@ public class ClsDAL
 				strError		+= "<b>  Target:</b> " + ex.TargetSite + "\n";
 				if (ex.InnerException != null && ex.InnerException.ToString() != "")
 					strError	+= "<b>   Inner:</b> " + ex.InnerException + "\n";
+				strError		+= "<b>   Trace:</b> " + ex.StackTrace + "\n";
 				strError		+= "\n";
-				_strErrors		+= strError;
-				UnityEngine.Debug.LogError(strError);
+				_strErrors	+= strError;
 			}
 			public void   ReportError(string strFile, string strFunc, string strPass, Exception ex, int intUserID)
 			{
@@ -1736,9 +1883,9 @@ public class ClsDAL
 				strError		+= "<b>  Target:</b> " + ex.TargetSite + "\n";
 				if (ex.InnerException != null && ex.InnerException.ToString() != "")
 					strError	+= "<b>   Inner:</b> " + ex.InnerException + "\n";
+				strError		+= "<b>   Trace:</b> " + ex.StackTrace + "\n";
 				strError		+= "\n";
-				_strErrors		+= strError;
-				UnityEngine.Debug.LogError(strError);
+				_strErrors	+= strError;
 			}
 
 		#endregion

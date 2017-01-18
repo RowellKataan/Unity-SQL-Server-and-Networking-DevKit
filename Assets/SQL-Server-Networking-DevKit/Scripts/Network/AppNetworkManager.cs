@@ -53,13 +53,17 @@ public class AppNetworkManager : NetworkManager
 		private					StatusManager				_stm							= null;
 		#endif
 
+		private					UserManager					_usm							= null;
+
 		private bool												_blnIsReady				= false;
 		private bool												_blnForceOffline	= false;
 		private bool												_blnForceHostMode	= false;
+		private bool												_blnIsAwake				= false;
 		private bool												_blnInitializing	= false;
 		private bool												_blnInitialized		= false;
 		private bool												_blnIsConnected		= false;
 		private bool												_blnWasConnected	= false;
+		private bool												_blnIsQuitting		= false;
 		private string											_strNetError			= "";
 		private int													_intNetConnectTmr	= 0;
 
@@ -68,6 +72,7 @@ public class AppNetworkManager : NetworkManager
 
 		private GameObject									_canvas						= null;
 		private GameObject									_pgc							= null;
+		private Scrollbar										_sbr							= null;
 
 	#endregion
 
@@ -95,6 +100,16 @@ public class AppNetworkManager : NetworkManager
 			}
 		}
 		#endif
+
+		private UserManager									Users
+		{
+			get
+			{
+				if (_usm == null)
+						_usm = UserManager.Instance;
+				return _usm;
+			}
+		}
 
 		private GameObject									Canvas
 		{
@@ -300,6 +315,17 @@ public class AppNetworkManager : NetworkManager
 			}
 			#endif
 		}
+		public	bool										IsQuitting
+		{
+			get
+			{ 
+				return _blnIsQuitting;
+			}
+			set
+			{
+				_blnIsQuitting = value;
+			}
+		}
 		public	int											PlayerCount
 		{
 			get
@@ -365,6 +391,10 @@ public class AppNetworkManager : NetworkManager
 		public	bool				ServerAlsoPlays						= true;
 		[SerializeField, HideInInspector]
 		public	bool				UsesMatchMaking						= false;
+		[SerializeField, HideInInspector]
+		public	Text				ServerLogText							= null;
+		[SerializeField, HideInInspector]
+		public	string			NetworkSettingsFile				= "";
 
 		// MASTER SERVER INFORMATION	-- DEPRECATED
 		[SerializeField, HideInInspector]
@@ -494,6 +524,8 @@ public class AppNetworkManager : NetworkManager
 				#if USES_STATUSMANAGER
 				Status.Status			= "Starting Server...";
 				Status.UpdateStatus();
+				#else
+				ServerLog("Starting Server...");
 				#endif
 
 				NetworkManager.singleton.StartServer();
@@ -503,12 +535,23 @@ public class AppNetworkManager : NetworkManager
 				#if USES_STATUSMANAGER
 				Status.Status			= "Stopping Server...";
 				Status.UpdateStatus();
+				#else
+				ServerLog("Stopping Server...");
 				#endif
+//			for (int i = 0; i < this.PlayerContainer.transform.childCount; i++)
+//			{
+//				ServerKickUser(this.PlayerContainer.transform.GetChild(i).GetComponent<User>().NetConnection);
+//			}
 				NetworkManager.singleton.StopServer();
 			}
 			public	void					ServerKickUser(NetworkConnection conn)
 			{
+//			NetworkServer.DestroyPlayersForConnection(conn);
 				conn.Disconnect();
+			}
+			public	void					ServerKickUser(User usr)
+			{
+				ServerKickUser(usr.NetConnection);
 			}
 
 			// HOST = SERVER+CLIENT
@@ -530,16 +573,25 @@ public class AppNetworkManager : NetworkManager
 				#if USES_STATUSMANAGER
 				Status.Status			= "Starting Host...";
 				Status.UpdateStatus();
+				#else
+				ServerLog("Starting Host...");
 				#endif
 
 				_networkClient		= NetworkManager.singleton.StartHost();
 			}
 			public	void					HostDisconnect()
 			{
+				ServerLog("Stopping Host...");
 				#if USES_STATUSMANAGER
 				Status.Status			= "Stopping Host...";
 				Status.UpdateStatus();
+				#else
+				ServerLog("Stopping Host...");
 				#endif
+//			for (int i = 0; i < this.PlayerContainer.transform.childCount; i++)
+//			{
+//				ServerKickUser(this.PlayerContainer.transform.GetChild(i).GetComponent<User>().NetConnection);
+//			}
 				NetworkManager.singleton.StopHost();
 			}
 
@@ -564,9 +616,12 @@ public class AppNetworkManager : NetworkManager
 				#if USES_STATUSMANAGER
 				Status.Status			= "Starting Client...";
 				Status.UpdateStatus();
+				#else
+				ServerLog("Starting Client...");
 				#endif
 
-				_networkClient		= NetworkManager.singleton.StartClient();
+				Awake();
+				_networkClient		= StartClient();
 			}
 			public	void					ClientConnect(MatchInfo matchInfo)
 			{
@@ -583,6 +638,8 @@ public class AppNetworkManager : NetworkManager
 				#if USES_STATUSMANAGER
 				Status.Status			= "Starting MatchMaking...";
 				Status.UpdateStatus();
+				#else
+				ServerLog("Starting MatchMaking...");
 				#endif
 
 				_networkClient		= NetworkManager.singleton.StartClient(matchInfo);
@@ -592,6 +649,8 @@ public class AppNetworkManager : NetworkManager
 				#if USES_STATUSMANAGER
 				Status.Status			= "Stopping Client...";
 				Status.UpdateStatus();
+				#else
+				ServerLog("Stopping Client...");
 				#endif
 				NetworkManager.singleton.StopClient();
 				_blnWasConnected = false;
@@ -600,7 +659,7 @@ public class AppNetworkManager : NetworkManager
 		#endregion
 
 		#region "MATCH MAKING FUNCTIONS"
-
+/*
 			public	void					StartMatchMaking()
 			{
 				if (!UsesMatchMaking)
@@ -640,6 +699,76 @@ public class AppNetworkManager : NetworkManager
 				PanelManager.Instance.ShowLoadingPanel();
 				NetworkManager.singleton.matchMaker.JoinMatch(networkID, strPassword, OnJoinMatch);
 			}
+*/
+		#endregion
+
+		#region "LOG OFF/QUIT FUNCTIONS"
+
+			public	void		GracefulServerShutdown()
+			{
+				// QUIT THE APPLICATION
+				App.DelayedQuitApplication(2.0f);
+
+				// DISCONNECT ALL USERS
+				if (Users.Users.Count > 0)
+				{
+					for (int i = 0; i < Users.Users.Count; i++)
+					{
+						Status.Status = "-- #" + Users.Users[i].UserID.ToString() + " " + Users.Users[i].Username + ": " + Users.Users[i].NetConnection.connectionId.ToString();
+						Users.Users[i].RpcRequestServerShutdown(Users.Users[i].NetConnection.connectionId, Users.Users[i].UserID);
+					}
+				}
+
+				// QUIT THE APPLICATION
+				App.QuitApplication();
+			}
+
+		#endregion
+
+		#region "UI FUNCTIONS"
+
+			public	void					ServerLog(string strText)
+			{
+
+				#if USES_STATUSMANAGER
+				Status.Status = strText;
+				Status.UpdateStatus();
+				#endif
+
+				if (IsServer)
+				{ 
+					#if IS_DEBUGGING
+					Debug.Log(strText);
+					#endif
+
+					if (strText.StartsWith("["))
+						strText = "[<color=green>" + System.DateTime.Now.ToString("MM/dd HH:mm:ss") + "</color> - " + strText.Substring(1);
+					else
+						strText = "[<color=green>" + System.DateTime.Now.ToString("MM/dd HH:mm:ss") + "</color>]: " + strText;
+					strText += "\r\n";
+
+					if (ServerLogText != null)
+					{
+						if (_sbr == null)
+								_sbr = ServerLogText.transform.parent.parent.FindChild("Scrollbar").GetComponent<Scrollbar>();
+
+						string	strLog = ServerLogText.text + strText;
+						int e = 0;
+						while (strLog.Length > MAX_SERVER_LOG_LENGTH && e < 25)
+						{
+							e++;
+							int i = strLog.IndexOf("\n");
+							if (i >= 0)
+								strLog = strLog.Substring(i + 1);
+							else
+								strLog = "";
+						}
+						ServerLogText.text = strLog;
+						if (_sbr != null)
+								_sbr.value = 0;
+					}
+				}
+			}
 
 		#endregion
 
@@ -651,9 +780,66 @@ public class AppNetworkManager : NetworkManager
 
 			protected void					Awake ()
 			{
+				// LOAD SETTINGS FROM NETWORK SETTINGS TEXT FILE
+				string[] strLines = null;
+
+				// FORCE THE CONFIGURATION FILE THROUGH
+				NetworkSettingsFile = "NetworkSettings.txt";
+
+				if (NetworkSettingsFile != "")
+				{
+					if (!Util.FileExists("", NetworkSettingsFile))
+						Status.Status = "Unable to find file \"" + NetworkSettingsFile + "\".";
+					else
+						strLines = Util.ReadTextFile("", NetworkSettingsFile).Split('\n');
+					if (strLines != null && strLines.Length > 0)
+					{
+						foreach (string st in strLines)
+						{
+							if (!st.StartsWith("//") && st.Trim() != "" && st.Contains("="))
+							{
+								string[] s = st.Trim().Split('=');
+								switch (s[0].Trim().ToLower())
+								{
+									case "applicationmode":
+										ServerMode = Util.ConvertToInt(s[1].Trim());
+										if (ServerMode < 1 || ServerMode > 4)
+												ServerMode = 1;
+										break;
+									case "serverip":
+										ServerIPaddress = s[1].Trim();
+										break;
+									case "serverport":
+										ServerPort = Util.ConvertToInt(s[1].Trim());
+										break;
+									case "displayname":
+										ServerName = s[1].Trim();
+										break;
+									case "description":
+										ServerDesc = s[1].Trim();
+										break;
+									case "password":
+										ServerPassword = s[1].Trim();
+										break;
+									case "maxconnections":
+										MaxConnections = Util.ConvertToInt(s[1].Trim());
+										break;
+								}
+							}
+						}
+
+						Status.Status = NetworkSettingsFile + " found. " + strLines.Length.ToString() + " lines Read In.";
+					}
+				} 
+
 				// INITIALIZE SINGLETON INSTANCES
 				this.dontDestroyOnLoad		= true;
 				NetworkManager.singleton	= GetInstance();
+				NetworkManager.singleton.networkAddress			= this.ServerIPaddress;
+				NetworkManager.singleton.serverBindAddress	= this.ServerIPaddress;
+				NetworkManager.singleton.networkPort				= this.ServerPort;
+				NetworkManager.singleton.maxConnections			= this.MaxConnections;
+
 				#if USES_APPLICATIONMANAGER
 				_app = ApplicationManager.Instance;
 				#endif
@@ -666,10 +852,15 @@ public class AppNetworkManager : NetworkManager
 				#if USES_STATUSMANAGER
 				Status.UpdateStatus();
 				#endif
+
+				_blnIsAwake = true;
 			}
 
 			private		void					OnApplicationQuit()
 			{
+				if (IsClient)				ClientDisconnect();
+				else if (IsServer)	ServerDisconnect();
+				else if (IsHost)		HostDisconnect();
 				_blnInitializing	= false;
 				_blnInitialized		= false;
 				_blnIsConnected		= false;
@@ -689,10 +880,13 @@ public class AppNetworkManager : NetworkManager
 				#if USES_STATUSMANAGER
 				Status.Status = "Player has Connected (" + conn.address + " / " + conn.connectionId.ToString() + ")";
 				Status.UpdateStatus();
+				#else
+				ServerLog("Player has Connected (" + conn.address + " / " + conn.connectionId.ToString() + ")");
 				#endif
 			}
 			public	override	void	OnServerDisconnect(NetworkConnection conn)
 			{
+
 				#if USES_STATUSMANAGER
 				if (conn != null)
 				{
@@ -710,7 +904,19 @@ public class AppNetworkManager : NetworkManager
 				} else
 					Status.Status = "Player has Disconnected";
 				Status.UpdateStatus();
+				#else
+				if (conn != null)
+				{
+					if (conn.address != "")
+						ServerLog("Player has Disconnected (" + conn.address + " / " + conn.connectionId.ToString() + ")");
+					else
+						ServerLog("Player has Disconnected (" + conn.connectionId.ToString() + ")");
+				} else
+					ServerLog("Player has Disconnected");
 				#endif
+
+				if (Users != null && conn != null)
+						Users.RemoveUserByNetworkConnection(conn);
 
 				base.OnServerDisconnect(conn);
 			}
@@ -720,6 +926,8 @@ public class AppNetworkManager : NetworkManager
 				#if USES_STATUSMANAGER
 				Status.Status = "Client #" + conn.connectionId.ToString() + " is Ready";
 				Status.UpdateStatus();
+				#else
+				ServerLog("Client #" + conn.connectionId.ToString() + " is Ready");
 				#endif
 			}
 			public	override	void	OnServerAddPlayer(NetworkConnection conn, short playerControllerId)
@@ -732,6 +940,8 @@ public class AppNetworkManager : NetworkManager
 				#if USES_STATUSMANAGER
 				Status.Status			= "Adding Player ( " + conn.address + " / " + conn.connectionId.ToString() + ") to List";
 				Status.UpdateStatus();
+				#else
+				ServerLog("Adding Player ( " + conn.address + " / " + conn.connectionId.ToString() + ") to List");
 				#endif
 			}
 			public						void	OnServerRemovePlayer(NetworkConnection conn, short playerControllerId)
@@ -748,6 +958,8 @@ public class AppNetworkManager : NetworkManager
 				#if USES_STATUSMANAGER
 				Status.Status = "Server Error (CODE: " + errorCode.ToString() + ")";
 				Status.UpdateStatus();
+				#else
+				ServerLog("Server Error (CODE: " + errorCode.ToString() + ")");
 				#endif
 			}
 			public	override	void	OnServerSceneChanged(string strSceneName)
@@ -756,6 +968,8 @@ public class AppNetworkManager : NetworkManager
 				#if USES_STATUSMANAGER
 				Status.Status = "Server Changing Scene to: " + strSceneName;
 				Status.UpdateStatus();
+				#else
+				ServerLog("Server Changing Scene to: " + strSceneName);
 				#endif
 			}
 
@@ -769,11 +983,24 @@ public class AppNetworkManager : NetworkManager
 				#if USES_STATUSMANAGER
 				Status.Status			= "Host has Started.";
 				Status.UpdateStatus();
+				#else
+				ServerLog("Host has Started.");
 				#endif
 				PanelManager.Instance.ShowLogInPanel();
 			}
 			public	override	void	OnStopHost()
 			{
+				// REMOVE ANY USERS FROM THE LIST
+				if (Users != null)
+				{ 
+					for (int i = Users.Users.Count - 1; i >= 0; i--)
+					{
+						User usr = Users.Users[i];
+						ServerKickUser(usr);
+						Users.RemoveUserByUser(usr);
+					}
+				}
+
 				base.OnStopHost();
 				_blnInitializing	= false;
 				_blnInitialized		= false;
@@ -782,6 +1009,8 @@ public class AppNetworkManager : NetworkManager
 				#if USES_STATUSMANAGER
 				Status.Status = "Host has Stopped.";
 				Status.UpdateStatus();
+				#else
+				ServerLog("Host has Stopped.");
 				#endif
 			}
 			public	override	void	OnStartServer()
@@ -794,11 +1023,24 @@ public class AppNetworkManager : NetworkManager
 				#if USES_STATUSMANAGER
 				Status.Status = "Server has Started.";
 				Status.UpdateStatus();
+				#else
+				ServerLog("Server has Started.");
 				#endif
 				PanelManager.Instance.ShowConnectPanel();
 			}
 			public	override	void	OnStopServer()
 			{
+				// REMOVE ANY USERS FROM THE LIST
+				if (Users != null)
+				{ 
+					for (int i = Users.Users.Count - 1; i >= 0; i--)
+					{
+						User usr = Users.Users[i];
+						ServerKickUser(usr);
+						Users.RemoveUserByUser(usr);
+					}
+				}
+
 				base.OnStopServer();
 				_blnInitializing	= false;
 				_blnInitialized		= false;
@@ -807,9 +1049,10 @@ public class AppNetworkManager : NetworkManager
 				#if USES_STATUSMANAGER
 				Status.Status = "Server has Stopped.";
 				Status.UpdateStatus();
+				#else
+				ServerLog("Server has Stopped.");
 				#endif
 			}
-
 
 		#endregion
 
@@ -825,12 +1068,17 @@ public class AppNetworkManager : NetworkManager
 				#if USES_STATUSMANAGER
 				Status.Status			= "Connected!";
 				Status.UpdateStatus();
+				#else
+				ServerLog("Connected!");
 				#endif
 				PanelManager.Instance.ShowLogInPanel();
 			}
 			public	override	void	OnClientDisconnect(NetworkConnection conn)
 			{
 				base.OnClientDisconnect(conn);
+				conn.Disconnect();
+				conn.Dispose();
+				conn = null;
 				if (!App.IsWorkingOffline)
 				{
 					_blnForceHostMode	= false;
@@ -841,10 +1089,12 @@ public class AppNetworkManager : NetworkManager
 					#if USES_STATUSMANAGER
 					Status.Status			= "Disconnected from Server";
 					Status.UpdateStatus();
+					#else
+					ServerLog("Disconnected from Server");
 					#endif
 
 					// ATTEMPT TO RE-CONNECT / RE-DISPLAY THE NETWORK CONNECTION PANEL
-					if (_blnWasConnected)
+					if (_blnWasConnected && !IsQuitting)
 					{ 
 						PanelManager.Instance.ShowConnectPanel();
 						PanelManager.Instance.ConnectPanelObject.GetComponent<NetworkConnectPanel>().Reconnect();
@@ -852,22 +1102,19 @@ public class AppNetworkManager : NetworkManager
 				}
 			}
 			#if !UNITY_WEBGL
-			private						void	OnDisconnectedFromServer(NetworkDisconnection info)
+			private						void	OnDisconnectedFromServer(NetworkDisconnection info) 
 			{
-				#if USES_STATUSMANAGER
-				if (Network.isServer)
+        if (Network.isServer)
 				{
-					Status.Status = "Local server connection disconnected";
+					ServerLog("Local server connection disconnected");
         } else {
 					if (info == NetworkDisconnection.LostConnection)
 					{
-						Status.Status = "Lost connection to the server";
+						ServerLog("Lost connection to the server");
 					} else {
-						Status.Status			= "Successfully diconnected from the server";
+						ServerLog("Successfully diconnected from the server");
 					}
 				}
-				Status.UpdateStatus();
-				#endif
 			}
 			#endif
 			public	override	void	OnClientError(NetworkConnection conn, int errorCode)
@@ -876,6 +1123,8 @@ public class AppNetworkManager : NetworkManager
 				#if USES_STATUSMANAGER
 				Status.Status = "Client Error: CODE(" + errorCode.ToString() + ")";
 				Status.UpdateStatus();
+				#else
+				ServerLog("Client Error: CODE(" + errorCode.ToString() + ")");
 				#endif
 			}
 			public	override	void	OnClientNotReady(NetworkConnection conn)
@@ -884,6 +1133,8 @@ public class AppNetworkManager : NetworkManager
 				#if USES_STATUSMANAGER
 				Status.Status = "Client Not Ready";
 				Status.UpdateStatus();
+				#else
+				ServerLog("Client Not Ready");
 				#endif
 			}
 			public	override	void	OnClientSceneChanged(NetworkConnection conn)
@@ -893,6 +1144,8 @@ public class AppNetworkManager : NetworkManager
 				#if USES_STATUSMANAGER
 				Status.Status = "Changing Scene...";
 				Status.UpdateStatus();
+				#else
+				ServerLog("Changing Scene...");
 				#endif
 			}
 			public	override	void	OnStartClient(NetworkClient client)
@@ -907,6 +1160,8 @@ public class AppNetworkManager : NetworkManager
 					#if USES_STATUSMANAGER
 					Status.Status = "Client has Started.";
 					Status.UpdateStatus();
+					#else
+					ServerLog("Client has Started.");
 					#endif
 				}
 			}
@@ -923,6 +1178,8 @@ public class AppNetworkManager : NetworkManager
 					#if USES_STATUSMANAGER
 					Status.Status = "Client is Stopped.";
 					Status.UpdateStatus();
+					#else
+					ServerLog("Client is Stopped.");
 					#endif
 				}
 			}
@@ -930,7 +1187,7 @@ public class AppNetworkManager : NetworkManager
 		#endregion
  
 		#region "MATCH MAKING EVENTS"
-
+/*
 			public	void					OnMatchCreate(CreateMatchResponse matchResponse)
 			{
 				if(matchResponse.success)
@@ -962,7 +1219,7 @@ public class AppNetworkManager : NetworkManager
 					_networkClient = NetworkManager.singleton.StartClient(new MatchInfo(matchJoin));
 				}
 			}
-
+*/
 		#endregion
 
 	#endregion 

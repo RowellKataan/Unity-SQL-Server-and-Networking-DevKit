@@ -127,6 +127,7 @@ public class MatchMakingPanel : MonoBehaviour
 				i++;
 				yield return null;
 			}
+/*
 			if (i > 99)
 			{
 				Net.StartMatchMaking();
@@ -135,6 +136,7 @@ public class MatchMakingPanel : MonoBehaviour
 				#endif
 			}
 			Net.GetHostList();
+*/
 		}
 
 	#endregion
@@ -182,8 +184,8 @@ public class MatchMakingPanel : MonoBehaviour
 
 		public	void					CreateServerButtonOnClick()
 		{
-			if (ServerNameInput != "")
-				Net.StartMatchHost(ServerNameInput, ServerPasswordInput);
+//		if (ServerNameInput != "")
+//			Net.StartMatchHost(ServerNameInput, ServerPasswordInput);
 		}
 		public	void					ReListServersButtonOnClick()
 		{

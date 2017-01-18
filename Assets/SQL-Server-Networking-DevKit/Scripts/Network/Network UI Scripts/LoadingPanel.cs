@@ -84,11 +84,11 @@ public class LoadingPanel : MonoBehaviour
 				if (Net.IsClient)
 				{ 
 					Net.ClientDisconnect();
-					if (Net.UsesMatchMaking)
-					{
-						PanelManager.Instance.ShowMatchMakingPanel();
-						Net.StartMatchMaking();
-					} else
+//				if (Net.UsesMatchMaking)
+//				{
+//					PanelManager.Instance.ShowMatchMakingPanel();
+//					Net.StartMatchMaking();
+//				} else
 						PanelManager.Instance.ShowConnectPanel();
 				}
 			}

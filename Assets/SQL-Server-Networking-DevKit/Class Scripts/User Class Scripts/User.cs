@@ -17,14 +17,47 @@ public class User : UserBase
 
 	#region "PRIVATE VARIABLES"
 
+		protected bool					_blnIsAdmin			= false;
+
+		// MANDATORY - GAME VARIABLES
+		protected bool					_blnInitialized	= false;
+		protected bool					_blnChangeMade	= false;
+		protected string				_strCryptoKey		= "ABCDEFGHabcdefgh1234!@#$";
+		protected GameObject		_gameObject			= null;
+
+//	private	GameManager			_gmm						= null;
 		private LogInPanel			_loginManager		= null;
 		private StatusManager		_statusManager	= null;
+		private UserManager			_usm						= null;
+
+		private int							_netConnID			= -1;
 
 	#endregion
 
 	#region "PRIVATE PROPERTIES"
 
-		private LogInPanel			LoginManager
+/*
+		protected GameManager						Game
+		{
+			get
+			{
+				if (_gmm == null)
+					_gmm = GameManager.Instance;
+				return _gmm;
+			}
+		}
+*/
+		protected UserManager						Users
+		{
+			get
+			{
+				if (_usm == null)
+						_usm = UserManager.Instance;
+				return _usm;
+			}
+		}
+
+		protected	LogInPanel						LoginManager
 		{
 			get
 			{
@@ -33,7 +66,7 @@ public class User : UserBase
 				return _loginManager;
 			}
 		}
-		private StatusManager		Status
+		protected	StatusManager					Status
 		{
 			get
 			{
@@ -47,6 +80,20 @@ public class User : UserBase
 
 	#region "PUBLIC PROPERTIES"
 
+		public		bool					IsAdmin
+		{
+			get
+			{
+				return _blnIsAdmin;
+			}
+		}
+		public		string				RealName
+		{
+			get
+			{
+				return (FirstName.Trim() + " " + LastName.Trim()).Trim();
+			}
+		}
 
 	#endregion
 
@@ -222,10 +269,10 @@ public class User : UserBase
 			// YOU CAN COMMENT THIS LINE OUT, AND BUILD YOUR OWN CUSTOM LoadByUserType FUNCTION
 			return base.LoadByUserType(xFind, blnActiveOnly);
 		}
-		public	override	void	Save()
+		public	override	bool	Save()
 		{
 			// YOU CAN COMMENT THIS LINE OUT, AND BUILD YOUR OWN CUSTOM SAVE FUNCTION
-			base.Save();
+			return base.Save();
 		}
 
 	#endregion
@@ -450,6 +497,138 @@ public class User : UserBase
 					}
 
 				#endregion
+
+			#endregion
+
+			#region "GET PLAYER COUNT (CONNECTED TO SERVER)"
+
+				public	void				RequestPlayerCount()
+				{
+					if (isLocalPlayer)
+						StartCoroutine(DelayedRequestPlayerCount());
+				}
+				private IEnumerator	DelayedRequestPlayerCount()
+				{
+					yield return new WaitForSeconds(0.50f);
+					CmdGetPlayerCount(this.NetID, this.UserID);
+				}
+
+				[Command]
+				public	void				CmdGetPlayerCount(int intConnID, int intUserID)
+				{
+					AppNetworkManager.Instance.ServerLog(this.Username + " requested Connected Player Count.");
+					RpcDisplayPlayerCount(intConnID, intUserID, AppNetworkManager.Instance.PlayerCount);
+				}
+				[ClientRpc]
+				public	void				RpcDisplayPlayerCount(int intConnID, int intUserID, int intPlayerCount)
+				{
+					Status.Status = "There are " + intPlayerCount.ToString() + " Player(s) Connected.";
+				}
+
+			#endregion
+
+			#region "KICK ALL PLAYERS OFF OF SERVER"
+
+				public	void				RequestPlayerKick()
+				{
+					if (isLocalPlayer && this.IsAdmin)
+						StartCoroutine(DelayedRequestPlayerKick());
+				}
+				private IEnumerator	DelayedRequestPlayerKick()
+				{
+					yield return new WaitForSeconds(0.50f);
+					CmdPlayerKick(this.NetID, this.UserID);
+				}
+				private IEnumerator	ResetServer()
+				{
+					yield return new WaitForSeconds(0.50f);
+					AppNetworkManager.Instance.ServerDisconnect();
+					AppNetworkManager.Instance.ServerLog("Server will restart in 5 seconds...");
+
+					yield return new WaitForSeconds(5.00f);
+					StartCoroutine(App.DoServerStart()); 
+				}
+
+				[Command]
+				public	void				CmdPlayerKick(int intConnID, int intUserID)
+				{
+					if (this.IsAdmin)
+					{
+						AppNetworkManager.Instance.ServerLog(this.Username + " requested All Players Kicked.");
+						StartCoroutine(ResetServer());
+					}
+				}
+
+			#endregion
+
+			#region "SHUT DOWN ALL APPLICATIONS (INCLUDING THE SERVER)"
+
+				public	void				RequestServerShutdown()
+				{
+					if (isLocalPlayer && this.IsAdmin)
+						StartCoroutine(DelayedRequestServerShutdown());
+				}
+				private IEnumerator DelayedRequestServerShutdown()
+				{
+					yield return new WaitForSeconds(0.50f);
+					CmdRequestServerShutdown(this.NetID, this.UserID);
+				}
+
+				[Command]
+				public	void				CmdRequestServerShutdown(int intConnID, int intUserID)
+				{
+					AppNetworkManager.Instance.ServerLog(this.Username + " requested Shutdown of Game Network.");
+					Net.GracefulServerShutdown();
+				}
+				[ClientRpc]
+				public	void				RpcRequestServerShutdown(int intConnID, int intUserID)
+				{
+					Net.IsQuitting = true;
+					Status.Status = "Server requested that Applications Quit (for maintenance).";
+					Net.ClientDisconnect();
+					App.QuitApplication();
+				}
+
+			#endregion
+
+			#region "SEND SYSTEM-WIDE MESSAGE"
+
+				public	void				SendSystemMessage(string strMessage)
+				{
+					if (isLocalPlayer)
+						StartCoroutine(DelayedSendSystemMessage(strMessage));
+				}
+				private IEnumerator DelayedSendSystemMessage(string strMessage)
+				{
+					yield return new WaitForSeconds(0.50f);
+					CmdSystemMessage(this.NetID, this.UserID, strMessage);
+				}
+
+				[Command]
+				public	void				CmdSystemMessage(int intConnID, int intUserID, string strMessage)
+				{
+					if (strMessage.Trim() != "")
+					{
+						AppNetworkManager.Instance.ServerLog(this.Username + ": " + strMessage);
+						strMessage = "[" + this.Username + "] : " + strMessage;
+
+						if (Users.Users.Count > 0)
+						{
+							for (int i = 0; i < Users.Users.Count; i++)
+							{
+								Users.Users[i].RpcSystemMessage(Users.Users[i].NetConnection.connectionId, intUserID, strMessage);
+							}
+						}
+					}
+				}
+				[ClientRpc]
+				public	void				RpcSystemMessage(int intConnID, int intUserID, string strMessage)
+				{
+					if (strMessage.Trim() != "")
+					{
+						Status.Status = strMessage;
+					}
+				}
 
 			#endregion
 

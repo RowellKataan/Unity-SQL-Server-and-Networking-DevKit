@@ -178,7 +178,7 @@ public class NetworkConnectPanel : MonoBehaviour
 		{
 			// INSTANTIATE AN UNCONNECTED USER/PLAYER OBJECT
 			Net.ClientDisconnect();
-			App.GameUserObject = (GameObject)GameObject.Instantiate(Net.playerPrefab, Vector3.zero, Quaternion.identity);
+			App.UserObj = (GameObject)GameObject.Instantiate(Net.playerPrefab, Vector3.zero, Quaternion.identity);
 			App.GameUser.SetUpUserObject();
 			App.IsWorkingOffline = true;
 			PanelManager.Instance.ShowLogInPanel();
