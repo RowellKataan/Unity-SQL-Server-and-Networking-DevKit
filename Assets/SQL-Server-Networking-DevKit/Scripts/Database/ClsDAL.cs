@@ -262,7 +262,8 @@ public class ClsDAL
 						get
 						{
 							if (UseWindowsAccount)
-								return "Server=" + DBserverString + ";Database=" + DBdatabase + ";Integrated Security=True;Trusted_Connection=True;";
+//							return "Server=" + DBserverString + ";Database=" + DBdatabase + ";Integrated Security=True;Trusted_Connection=True;";
+								return "Server=" + DBserverString + ";Database=" + DBdatabase + ";Integrated Security=SSPI;";		//Trusted_Connection=Yes;
 							else
 								return "Server=" + DBserverString + ";Database=" + DBdatabase + ";User ID=" + DBuser + ";Password=" + DBpassword + ";";
 						}
@@ -420,6 +421,19 @@ public class ClsDAL
 
 		#region "PARAMETER DEFINITION FUNCTIONS"
 
+					private void RemoveDuplicateParameter(string strParamName)
+					{
+						strParamName = strParamName.ToLower();
+						for (int i = _SQLSPparams.Count - 1; i >= 0; i--)
+						{
+							if (_SQLSPparams[i].ParameterName.ToLower() == strParamName)
+							{
+								_SQLSPparams.RemoveAt(i);
+								break;
+							}
+						}
+					}
+
 					private void SQLAddParam(string strParamName, string    strParamValue)
 					{
 						if (!SQLisConnected)
@@ -427,11 +441,17 @@ public class ClsDAL
 							 
 						try
 						{
+							RemoveDuplicateParameter(strParamName);
 							SqlParameter sParam		= new SqlParameter();
 							sParam.ParameterName	= strParamName;
 							sParam.SqlDbType			= SqlDbType.VarChar;
 							sParam.SqlValue				= strParamValue;
 							sParam.Direction			= ParameterDirection.Input;
+
+
+							if (_SQLSPparams.Contains(sParam.ParameterName))
+								_SQLSPparams.Remove(
+
 							_SQLSPparams.Add(sParam);
 						} catch (Exception ex) { ReportError("ClsDAL.cs", "SQLAddParam(STRING)", strParamValue, ex); }
 					}
@@ -442,6 +462,7 @@ public class ClsDAL
 
 						try
 						{
+							RemoveDuplicateParameter(strParamName);
 							SqlParameter sParam		= new SqlParameter();
 							sParam.ParameterName	= strParamName;
 							sParam.SqlDbType			= SqlDbType.Int;
@@ -457,6 +478,7 @@ public class ClsDAL
 
 						try 
 						{
+							RemoveDuplicateParameter(strParamName);
 							SqlParameter sParam  = new SqlParameter();
 							sParam.ParameterName = strParamName;
 							sParam.SqlDbType     = SqlDbType.Decimal;
@@ -472,6 +494,7 @@ public class ClsDAL
 
 						try 
 						{
+							RemoveDuplicateParameter(strParamName);
 							SqlParameter sParam  = new SqlParameter();
 							sParam.ParameterName = strParamName;
 							sParam.SqlDbType     = SqlDbType.Float;
@@ -487,6 +510,7 @@ public class ClsDAL
 
 						try
 						{
+							RemoveDuplicateParameter(strParamName);
 							SqlParameter  sParam = new SqlParameter();
 							sParam.ParameterName = strParamName;
 							sParam.SqlDbType     = SqlDbType.Decimal;
@@ -502,6 +526,7 @@ public class ClsDAL
 
 						try
 						{
+							RemoveDuplicateParameter(strParamName);
 							SqlParameter sParam  = new SqlParameter();
 							sParam.ParameterName = strParamName;
 							sParam.SqlDbType     = SqlDbType.Float;
@@ -517,6 +542,7 @@ public class ClsDAL
 
 						try
 						{
+							RemoveDuplicateParameter(strParamName);
 							SqlParameter sParam = new SqlParameter();
 							sParam.ParameterName = strParamName;
 							sParam.SqlDbType = SqlDbType.DateTime;
@@ -532,6 +558,7 @@ public class ClsDAL
 
 						try
 						{
+							RemoveDuplicateParameter(strParamName);
 							SqlParameter sParam  = new SqlParameter();
 							sParam.ParameterName = strParamName;
 							sParam.SqlDbType     = SqlDbType.Bit;
@@ -547,6 +574,7 @@ public class ClsDAL
 
 						try
 						{
+							RemoveDuplicateParameter(strParamName);
 							SqlParameter sParam		= new SqlParameter();
 							sParam.ParameterName	= strParamName;
 							sParam.SqlDbType			= SqlDbType.VarBinary;
@@ -562,6 +590,7 @@ public class ClsDAL
 
 						try
 						{
+							RemoveDuplicateParameter(strParamName);
 							SqlParameter sParam		= new SqlParameter();
 							sParam.ParameterName	= strParamName;
 							sParam.SqlDbType			= sType;
@@ -577,6 +606,7 @@ public class ClsDAL
 
 						try
 						{
+							RemoveDuplicateParameter(strParamName);
 							SqlParameter sParam		= new SqlParameter();
 							sParam.ParameterName	= strParamName;
 							sParam.SqlDbType			= sType;
@@ -1866,6 +1896,7 @@ public class ClsDAL
 				strError		+= "<b>   Trace:</b> " + ex.StackTrace + "\n";
 				strError		+= "\n";
 				_strErrors	+= strError;
+				Util.CopyToClipboard(strError);
 			}
 			public void   ReportError(string strFile, string strFunc, string strPass, Exception ex, int intUserID)
 			{
@@ -1886,6 +1917,7 @@ public class ClsDAL
 				strError		+= "<b>   Trace:</b> " + ex.StackTrace + "\n";
 				strError		+= "\n";
 				_strErrors	+= strError;
+				Util.CopyToClipboard(strError);
 			}
 
 		#endregion
