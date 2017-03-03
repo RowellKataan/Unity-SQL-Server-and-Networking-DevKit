@@ -447,11 +447,6 @@ public class ClsDAL
 							sParam.SqlDbType			= SqlDbType.VarChar;
 							sParam.SqlValue				= strParamValue;
 							sParam.Direction			= ParameterDirection.Input;
-
-
-							if (_SQLSPparams.Contains(sParam.ParameterName))
-								_SQLSPparams.Remove(
-
 							_SQLSPparams.Add(sParam);
 						} catch (Exception ex) { ReportError("ClsDAL.cs", "SQLAddParam(STRING)", strParamValue, ex); }
 					}
