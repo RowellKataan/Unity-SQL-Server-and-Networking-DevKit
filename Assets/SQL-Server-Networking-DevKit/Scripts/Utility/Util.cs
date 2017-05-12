@@ -1,12 +1,12 @@
-﻿
-
-
-
-
-
-
-
-
+﻿// ===========================================================================================================
+//
+// Class/Library: Utility Class
+//        Author: Michael Marzilli   ( http://www.linkedin.com/in/michaelmarzilli , http://www.develteam.com/Developer/Rowell/Portfolio )
+//       Created: Jun 10, 2016
+//	
+// VERS 1.0.000 : Jun 10, 2016 : Original File Created. Released for Unity 3D.
+//
+// ===========================================================================================================
 
 using UnityEngine;
 using UnityEngine.UI;
@@ -17,6 +17,12 @@ using System.IO;
 
 public class Util : MonoBehaviour 
 {
+
+	#region "PRIVATE CONSTANTS"
+
+		private const string					CURRENCY_SYMBOL	= "$";
+
+	#endregion
 
 	#region "DATA CHECKING FUNCTIONS"
 
@@ -106,7 +112,7 @@ public class Util : MonoBehaviour
 			if (IsDate(strInput))
 				return System.DateTime.Parse(strInput);
 			else
-				return System.DateTime.Parse("01/01/0001");
+				return System.DateTime.Parse("01/01/1900");
 		}
 		public static string					PlusMinus(						int			intInput)
 		{
@@ -117,16 +123,12 @@ public class Util : MonoBehaviour
 		}
 		public static int							ConvertToInt(					string	strInput)
 		{
-			if (IsInt(strInput))
-				return System.Convert.ToInt32(strInput);
-			else
-				return 0;
+			strInput = strInput.Replace(",", "");
+			return (IsInt(strInput)) ? System.Convert.ToInt32(strInput) : 0;
 		}
 		public static int							ConvertToInt(					bool		blnInput)
 		{
-			if (blnInput)
-				return 1;
-			return 0;
+			return (blnInput) ? 1 : 0;
 		}
 		public static int							ConvertToInt(					float		dblInput)
 		{
@@ -138,17 +140,11 @@ public class Util : MonoBehaviour
 		}
 		public static long						ConvertToLong(				string	strInput)
 		{
-			if (IsLong(strInput))
-				return System.Convert.ToInt64(strInput);
-			else
-				 return 0; 
+			return (IsLong(strInput)) ? System.Convert.ToInt64(strInput) : 0; 
 		}
 		public static float						ConvertToFloat(				string	strInput)
 		{
-			if (IsFloat(strInput))
-				return System.Convert.ToSingle(strInput);
-			else
-				return 0;
+			return (IsFloat(strInput)) ? System.Convert.ToSingle(strInput) : 0;
 		}
 		public static float						ConvertToFloat(				int			intInput)
 		{
@@ -160,48 +156,15 @@ public class Util : MonoBehaviour
 		}
 		public static bool						ConvertToBoolean(			string	strInput)
 		{
-			if (strInput.Trim().ToLower().Trim() == "true" || strInput.Trim() == "1")
-				return true;
-			return false;
+			return (strInput.Trim().ToLower().Trim() == "true" || strInput.Trim() == "1");
 		}
 		public static string					ConvertToMoneyString(	float		dblInput, bool blnShowSign = false)
 		{
-			bool blnNegative = (dblInput < 0);
-			dblInput = Mathf.Abs(dblInput);
-			string strOutput = dblInput.ToString();
-			if (strOutput.IndexOf(".") < 0)
-				strOutput += ".00";
-			if (strOutput.Length - strOutput.IndexOf(".") < 3)
-				strOutput += "0";
-			strOutput = "$" + strOutput;
-			if (dblInput > 0)
-			{
-				if (blnNegative)
-					strOutput = "- " + strOutput;
-				else if (blnShowSign)
-					strOutput = "+ " + strOutput;
-			}
-			
-			return strOutput;
+			return ((blnShowSign || dblInput < 0) ? ((dblInput < 0) ? "-" : "+") : "") + CURRENCY_SYMBOL + Mathf.Abs(dblInput).ToString("0.00");
 		}
 		public static string					ConvertToFloatString(	float		dblInput, bool blnShowSign = false)
 		{
-			bool blnNegative = (dblInput < 0);
-			dblInput = Mathf.Abs(dblInput);
-			string strOutput = dblInput.ToString();
-			if (strOutput.IndexOf(".") < 0)
-				strOutput += ".00";
-			if (strOutput.Length - strOutput.IndexOf(".") < 3)
-				strOutput += "0";
-			if (dblInput > 0)
-			{
-				if (blnNegative)
-					strOutput = "- " + strOutput;
-				else if (blnShowSign)
-					strOutput = "+ " + strOutput;
-			}
-
-			return strOutput;
+			return ((blnShowSign || dblInput < 0) ? ((dblInput < 0) ? "-" : "+") : "") + Mathf.Abs(dblInput).ToString("0.00");
 		}
 		public static string					ConvertToFloatString(	float		dblInput, bool blnAddSign, int intPlaces)
 		{
@@ -240,6 +203,10 @@ public class Util : MonoBehaviour
 			float dblC = (dblA / dblB);
 						dblC = dblC * 100;
 			return ConvertToInt(dblC);
+		}
+		public	static	string				ConvertToHex(int i)
+		{
+			return string.Format("{0:X6}", i);
 		}
 
 		public static long						DateDiff(DateInterval interval, System.DateTime dateStart, System.DateTime dateEnd) 
@@ -314,6 +281,16 @@ public class Util : MonoBehaviour
 			} catch { Debug.LogError("Error in ConvertToQuaternion. " + strInput); }
 			return q3;
 		}
+		public static Color						ConvertToColor(				string strInput)
+		{
+			string[] str = strInput.Split(","[0]);
+			Color outp = Color.black;
+			for (int i = 0; i < str.Length; i++) 
+			{
+				outp[i] = float.Parse(str[i]);
+			}
+			return outp;
+     }
 		public static string					ConvertSecondsToTime(	float	intInput, bool blnLongDisplay = false)
 		{
 			string st = "";

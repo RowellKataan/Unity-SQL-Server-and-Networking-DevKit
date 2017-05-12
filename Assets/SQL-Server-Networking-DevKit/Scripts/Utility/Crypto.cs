@@ -23,10 +23,11 @@ public class Crypto
 
 	#region "PRIVATE VARIABLES"
 
-		private static string strDefaultKey        = "12345678901234567890123456789012";
+		// CHANGE THESE DEFAULT VALUES TO SOMETHING UNIQUE
 
 		//                                           |      ENCRYPTION KEY SIZE       |  (32 Characters)
 		//                                           |================================|
+		private static string strDefaultKey        = "12345678901234567890123456789012";
     private static string strDefaultVpadding   = "12345678901234567890123456789012";
     private static string strDefaultPadding    = "12345678901234567890123456789012";
 
@@ -47,61 +48,38 @@ public class Crypto
 			try 
 			{ 
 				if (strDefaultKey      == "") 
-				{
+						strDefaultKey						= "12345678901234567890123456789012";
+			} catch { strDefaultKey				= "12345678901234567890123456789012"; }	// 32 CHARACTERS
 
-					strDefaultKey = "1234567890123456";
-				
-				}
-			} catch { strDefaultKey        = "1234567890123456"; }									// 16 CHARACTERS
 			try 
 			{
 				if (strDefaultVpadding == "")
-				{
-
-					strDefaultVpadding = "12345678901234567890123456789012";
-
-				}
-			} catch { strDefaultVpadding   = "12345678901234567890123456789012"; }	// 32 CHARACTERS
+						strDefaultVpadding			= "12345678901234567890123456789012";
+			} catch { strDefaultVpadding	= "12345678901234567890123456789012"; }	// 32 CHARACTERS
 			
 			try 
 			{
 				if (strDefaultPadding  == "") 
-				{
-
-					strDefaultPadding = "12345678901234567890123456789012"; 
-
-				}
-			} catch { strDefaultPadding    = "12345678901234567890123456789012"; }	// 32 CHARACTERS
+						strDefaultPadding				= "12345678901234567890123456789012"; 
+			} catch { strDefaultPadding		= "12345678901234567890123456789012"; }	// 32 CHARACTERS
 			
 			try 
 			{
 				if (strDefaultSalt     == "") 
-				{
-
-					strDefaultSalt = "12345678901234567890";
-
-				}
-			} catch { strDefaultSalt       = "12345678901234567890"; }							// 20 CHARACTERS
+						strDefaultSalt					= "12345678901234567890";
+			} catch { strDefaultSalt			= "12345678901234567890"; }							// 20 CHARACTERS
 			
 			try 
 			{
 				if (strDefaultVector   == "") 
-				{
-
-					strDefaultVector = "12345678901234567890";
-
-				}
-			} catch { strDefaultVector     = "12345678901234567890"; }							// 20 CHARACTERS
+						strDefaultVector				= "12345678901234567890";
+			} catch { strDefaultVector		= "12345678901234567890"; }							// 20 CHARACTERS
 			
 			try 
 			{
 				if (intDefaultIterations < 1) 
-				{
-
-					intDefaultIterations = 572;
-
-				}
-			} catch { intDefaultIterations = 572; }
+						intDefaultIterations = 1000;
+			} catch { intDefaultIterations = 1000; }
 		}
 		
 	#endregion

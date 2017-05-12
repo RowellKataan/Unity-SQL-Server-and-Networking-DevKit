@@ -8,6 +8,7 @@
 //			1.0.001	:	Jun 11, 2016 :	Added a SubText field/element to the ListBox Control.
 //																The SubText field is a right justified field that can add additional information.
 //																Such as displaying a price for an item in and item list for a shop.
+//			1.0.002	: May 04, 2017 :	Added delegates for AddListItem and RemoveListItem.
 //
 // ===========================================================================================================
 
@@ -24,6 +25,8 @@ using System.Collections.Generic;
 
 public	delegate	void	OnListBoxSelectChanged(	GameObject go, int intSelected);
 public	delegate	void	OnListBoxDoubleClick(		GameObject go, int intSelected);
+public	delegate	void	OnAddListItemEvent(			GameObject go, int intAddedIndex);
+public	delegate	void	OnRemoveListItemEvent(	GameObject go, int intRemovedIndex);
 
 [System.Serializable]
 public	class						ListBoxControl : MonoBehaviour 
@@ -131,6 +134,8 @@ public	class						ListBoxControl : MonoBehaviour
 		[SerializeField]
 		public		bool										CanMultiSelect			= false;
 		[SerializeField]
+		public		bool										AutoMultiSelect			= false;
+		[SerializeField]
 		public		float										Height							= 36;
 		[SerializeField]
 		public		float										Spacing							=  4;
@@ -169,7 +174,8 @@ public	class						ListBoxControl : MonoBehaviour
 					ListBoxTitle.gameObject.SetActive(_strTitle != "");
 					ListBoxTitle.text = _strTitle;
 				} else
-					ListBoxTitle.gameObject.SetActive(false);
+					if (ListBoxTitle != null)
+							ListBoxTitle.gameObject.SetActive(false);
 			}
 		}
 		public		bool										TitleBestFit
@@ -338,9 +344,16 @@ public	class						ListBoxControl : MonoBehaviour
 			if (ListBoxMode == ListBoxModes.DropDownList)
 				return;
 
+			// RE-SIZE THE SCROLL CONTAINER
 			// REMOVE ANY GAMEOBJECTS IN THE CONTAINER
 			if (ScrollContainerObject != null)
-			{ 
+			{
+				// RESIZE THE WIDTH OF THE CONTAINER TO MATCH THE CONTROL
+				Vector2 v2 = ScrollContainerObject.GetComponent<RectTransform>().sizeDelta;
+				v2.x = ScrollContainerObject.transform.parent.GetComponent<RectTransform>().sizeDelta.x;
+				ScrollContainerObject.GetComponent<RectTransform>().sizeDelta = v2;
+
+				// REMOVE GAMEOBJECTS IN THE CONTAINER
 				if (ScrollContainerObject.transform.childCount > 0)
 				{
 					for (int i = ScrollContainerObject.transform.childCount - 1; i >= 0; i--)
@@ -355,7 +368,7 @@ public	class						ListBoxControl : MonoBehaviour
 
 			// RESIZE THE ITEM CONTAINER TO THE WIDTH OF THE SCROLL RECT
 			if (ContainerRect != null)
-					ContainerRect.sizeDelta = new Vector2(ScrollRect.rect.width, ScrollRect.rect.height);
+					ContainerRect.sizeDelta = new Vector2(ScrollRect.rect.width, ContainerRect.rect.height);
 
 			// SET SCROLLBAR SENSITIVITY
 			if (ScrollRectObject != null)
@@ -507,8 +520,6 @@ public	class						ListBoxControl : MonoBehaviour
 			{
 				yield return new WaitForSeconds(SCROLL_DELAY);
 				ScrollBarObject.GetComponent<Scrollbar>().value = 0;
-//			yield return new WaitForSeconds(0.0001f);
-//			ScrollBarObject.GetComponent<Scrollbar>().value = 1;
 				yield return new WaitForSeconds(0.0001f);
 				ScrollBarObject.GetComponent<Scrollbar>().value = fValue;
 			}
@@ -546,26 +557,7 @@ public	class						ListBoxControl : MonoBehaviour
 					_intItemCount++;
 					i = Items.Count;
 					GameObject go = (GameObject)Instantiate(ListBoxLineItemPrefabObject);
-					go.transform.SetParent(ScrollContainerObject.transform);
-					go.GetComponent<ListBoxLineItem>().ListBoxControlObject	= this.gameObject;
-					go.GetComponent<ListBoxLineItem>().Index								= i;
-					go.GetComponent<ListBoxLineItem>().Spacing							= this.Spacing;
-					go.GetComponent<ListBoxLineItem>().Width								= ContainerRect.sizeDelta.x - (this.Spacing * 2);
-					if (this.Height > 0)
-						go.GetComponent<ListBoxLineItem>().Height							= this.Height;
-					else
-						this.Height = go.GetComponent<ListBoxLineItem>().Height;
-					go.GetComponent<ListBoxLineItem>().ItemNormalColor			= ItemNormalColor;
-					go.GetComponent<ListBoxLineItem>().ItemHighlightColor		=	ItemHighlightColor;
-					go.GetComponent<ListBoxLineItem>().ItemSelectedColor		= ItemSelectedColor;
-					go.GetComponent<ListBoxLineItem>().ItemDisabledColor		= ItemDisabledColor;
-					go.GetComponent<ListBoxLineItem>().Value								= strValue;
-					go.GetComponent<ListBoxLineItem>().Text									= strText;
-					go.GetComponent<ListBoxLineItem>().SubText							= strSub;
-					go.GetComponent<ListBoxLineItem>().SetIcon(sprIcon);
-					go.GetComponent<ListBoxLineItem>().AutoSize();
-					Items.Add(go.GetComponent<ListBoxLineItem>());
-					ResizeContainer();
+					PrivAddItem(go, i, strValue, strText, sprIcon, strSub);
 				}		
 		}
 		private void					PrivAddItem(		string		strValue,	string strText, Sprite sprIcon,				string	strSub = "")
@@ -593,27 +585,42 @@ public	class						ListBoxControl : MonoBehaviour
 					_intItemCount++;
 					i = Items.Count;
 					GameObject go = (GameObject)Instantiate(ListBoxLineItemPrefabObject);
-					go.transform.SetParent(ScrollContainerObject.transform);
-					go.GetComponent<ListBoxLineItem>().ListBoxControlObject = this.gameObject;
-					go.GetComponent<ListBoxLineItem>().Index								= i;
-					go.GetComponent<ListBoxLineItem>().Spacing							= this.Spacing;
-					go.GetComponent<ListBoxLineItem>().Width								= ContainerRect.sizeDelta.x - (this.Spacing * 2);
-					if (this.Height > 0)
-						go.GetComponent<ListBoxLineItem>().Height							= this.Height;
-					else
-						this.Height = go.GetComponent<ListBoxLineItem>().Height;
-					go.GetComponent<ListBoxLineItem>().ItemNormalColor			= ItemNormalColor;
-					go.GetComponent<ListBoxLineItem>().ItemHighlightColor		=	ItemHighlightColor;
-					go.GetComponent<ListBoxLineItem>().ItemSelectedColor		= ItemSelectedColor;
-					go.GetComponent<ListBoxLineItem>().ItemDisabledColor		= ItemDisabledColor;
-					go.GetComponent<ListBoxLineItem>().Value								= strValue;
-					go.GetComponent<ListBoxLineItem>().Text									= strText;
-					go.GetComponent<ListBoxLineItem>().SubText							= strSub;
-					go.GetComponent<ListBoxLineItem>().SetIcon(sprIcon);
-					go.GetComponent<ListBoxLineItem>().AutoSize();
-					Items.Add(go.GetComponent<ListBoxLineItem>());
-					ResizeContainer();
+					PrivAddItem(go, i, strValue, strText, sprIcon, strSub);
 				}
+		}
+		private void					PrivAddItem(GameObject go, int intIndex, string strValue,	string strText, Sprite sprIcon, string	strSub = "")
+		{
+			go.transform.SetParent(ScrollContainerObject.transform, false);
+
+			CanvasScaler scaler = go.transform.GetComponentInParent<CanvasScaler>();
+			if (scaler != null && scaler.uiScaleMode == CanvasScaler.ScaleMode.ScaleWithScreenSize)
+			{
+				// If the parent Canvas Scaler has UI Scale Mode set to "ScaleWithScreenSize", it messes up the item's scale, so we reset it to 1
+				go.GetComponent<RectTransform>().localScale = Vector3.one;
+				go.transform.localScale = Vector3.one;
+			}
+
+			go.GetComponent<ListBoxLineItem>().ListBoxControlObject = this.gameObject;
+			go.GetComponent<ListBoxLineItem>().Index								= intIndex;
+			go.GetComponent<ListBoxLineItem>().Spacing							= this.Spacing;
+			go.GetComponent<ListBoxLineItem>().Width								= ContainerRect.sizeDelta.x - (this.Spacing * 2);
+			if (this.Height > 0)
+				go.GetComponent<ListBoxLineItem>().Height							= this.Height;
+			else
+				this.Height = go.GetComponent<ListBoxLineItem>().Height;
+			go.GetComponent<ListBoxLineItem>().ItemNormalColor			= ItemNormalColor;
+			go.GetComponent<ListBoxLineItem>().ItemHighlightColor		=	ItemHighlightColor;
+			go.GetComponent<ListBoxLineItem>().ItemSelectedColor		= ItemSelectedColor;
+			go.GetComponent<ListBoxLineItem>().ItemDisabledColor		= ItemDisabledColor;
+			go.GetComponent<ListBoxLineItem>().Value								= strValue;
+			go.GetComponent<ListBoxLineItem>().Text									= strText;
+			go.GetComponent<ListBoxLineItem>().SubText							= strSub;
+			go.GetComponent<ListBoxLineItem>().SetIcon(sprIcon);
+			if (OnAddListItem != null)
+					OnAddListItem(go, intIndex);
+			go.GetComponent<ListBoxLineItem>().AutoSize();
+			Items.Add(go.GetComponent<ListBoxLineItem>());
+			ResizeContainer();
 		}
 
 	#endregion
@@ -901,6 +908,9 @@ public	class						ListBoxControl : MonoBehaviour
 			{
 				if (intIndex < 0 || intIndex >= Items.Count)
 					return;
+
+				if (OnRemoveListItem != null)
+						OnRemoveListItem(Items[intIndex].gameObject, intIndex);
 
 				for (int i = Items.Count - 1; i >= intIndex; i--)
 				{
@@ -1364,6 +1374,8 @@ public	class						ListBoxControl : MonoBehaviour
 
 		public	event						OnListBoxSelectChanged		OnChange;
 		public	event						OnListBoxDoubleClick			OnDoubleClick;
+		public	event						OnAddListItemEvent				OnAddListItem;
+		public	event						OnRemoveListItemEvent			OnRemoveListItem;
 								
 	#endregion
 

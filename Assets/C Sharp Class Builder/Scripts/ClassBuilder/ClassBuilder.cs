@@ -8,6 +8,8 @@
 //			1.0.002 : Jun 07, 2016 :	Added SQL entity Naming Convention (int constant).
 //																Resolved bug in the Class C# creator, Public Search Section. Misplaced closing } came before the ELSE statement.
 //																Resolved bug in the utility class, which was pointing to the wrong directory for FileExists check.
+//			1.0.003 : Feb 14, 2017 :	Added the ability to create Unity Database Assets from the Class.
+//																Added the ability to store Sprites/Images in the class/database.
 //
 // ===========================================================================================================
 
@@ -15,8 +17,6 @@
 using UnityEditor;
 #endif
 using UnityEngine;
-using UnityEngine.UI;
-using System.Collections;
 using System.Collections.Generic;
 
 namespace CBT
@@ -35,6 +35,7 @@ namespace CBT
 			[SerializeField]	public	bool				IsMandatory		= false;
 			[SerializeField]	public	bool				IsSearchable	= false;
 			[SerializeField]	public	bool				IsSynchVar		= false;
+			[SerializeField]	public	bool				IsNameVar			= false;
 			[SerializeField]	private	string			_varType			= "";
 			[SerializeField]	private string			_strStart			= "";
 
@@ -47,8 +48,10 @@ namespace CBT
 				set
 				{
 					_varType = value;
-					if (_varType.ToLower() == "vector2" || _varType.ToLower() == "vector3" || _varType.ToLower() == "quaternion")
+					if (_varType.ToLower() == "vector2" || _varType.ToLower() == "vector3" || _varType.ToLower() == "quaternion" || _varType.ToLower() == "color")
 						MaxLength = 50;
+					if (_varType.ToLower() == "sprite" || _varType.ToLower() == "image")
+						MaxLength = 300;
 				}
 			}
 			public	string			StartingValue
@@ -71,12 +74,17 @@ namespace CBT
 								return Vector3.zero.ToString();
 							case "quaternion":
 								return Quaternion.identity.ToString();
+							case "color":
+								return "Color.black";
 							case "date":
 							case "datetime":
 	//						return "01/01/1900";
 								break;
 							case "bool":
 								return "false";
+							case "sprite":
+							case "image":
+								return "null";
 						}
 						if (_varType.ToLower().StartsWith("enum"))
 							return _varType.Substring(4) + ".NONE";
@@ -116,6 +124,11 @@ namespace CBT
 							return "_v3";
 						case "quaternion":
 							return "_q3";
+						case "color":
+							return "_col";
+						case "sprite":
+						case "image":
+							return "_sprImg";
 					}
 					if (VarType.ToLower().StartsWith("enum"))
 						return "_en";
@@ -141,7 +154,12 @@ namespace CBT
 						case "double":
 							return "0";
 						case "datetime":
-							return "System.DateTime.Parse(\"01/01/1900\")";
+							return "System.DateTime.Now";
+						case "sprite":
+						case "image":
+							return "null";
+						case "color":
+							return Color.black.ToString();
 					}
 					if (VarType.ToLower().StartsWith("enum"))
 						return VarType.Substring(4) + ".NONE";
@@ -172,6 +190,11 @@ namespace CBT
 							return "Util.ConvertToVector3(dr[\"" + Name.ToUpper() + "\"].ToString())";
 						case "quaternion":
 							return "Util.ConvertToQuaternion(dr[\"" + Name.ToUpper() + "\"].ToString())";
+						case "color":
+							return "Util.ConvertToColor(dr[\"" + Name.ToUpper() + "\"].ToString())";
+						case "sprite":
+						case "image":
+ 							return "GetSprite(ref _sprImg" + Name + ", ref _strImg" + Name + ", dr[\"" + Name.ToUpper() + "\"].ToString())";
 					}
 					if (VarType.ToLower().StartsWith("enum"))
 						return "((" + VarType.Substring(4) + ") Util.ConvertToInt(dr[\"" + Name.ToUpper() + "\"].ToString()))";
@@ -191,6 +214,7 @@ namespace CBT
 							case "vector2":
 							case "vector3":
 							case "quaternion":
+							case "color":
 								return Name + ".ToString()";
 							default:
 								return Name;
@@ -227,6 +251,7 @@ namespace CBT
 						case "vector2":
 						case "vector3":
 						case "quaternion":
+						case "color":
 							return "VARCHAR(50)";
 						case "string":
 						default:
@@ -256,6 +281,7 @@ namespace CBT
 						case "vector3":
 						case "quaternion":
 						case "string":
+						case "color":
 						default:
 							return "VARCHAR";
 						case "int":
@@ -284,7 +310,8 @@ namespace CBT
 				strOut += Util.ConvertToInt(IsDeleted).ToString()			+ "^";
 				strOut += Util.ConvertToInt(IsMandatory).ToString()		+ "^";
 				strOut += Util.ConvertToInt(IsSearchable).ToString()	+ "^";
-				strOut += Util.ConvertToInt(IsSynchVar).ToString();
+				strOut += Util.ConvertToInt(IsSynchVar).ToString()		+ "^";
+				strOut += Util.ConvertToInt(IsNameVar).ToString();
 
 				return strOut;
 			}
@@ -301,6 +328,7 @@ namespace CBT
 				try { IsMandatory		= Util.ConvertToBoolean(strSpl[6]); } catch { IsMandatory		= false;	}
 				try { IsSearchable	= Util.ConvertToBoolean(strSpl[7]); } catch { IsSearchable	= false;	}
 				try { IsSynchVar		=	Util.ConvertToBoolean(strSpl[8]); } catch { IsSynchVar		= false;	}
+				try { IsNameVar			=	Util.ConvertToBoolean(strSpl[9]); } catch { IsNameVar			= false;	}
 			}
 		}
 
@@ -330,7 +358,8 @@ namespace CBT
 			[SerializeField, HideInInspector]	private bool				_blnIsNetworkObject			= false;
 			[SerializeField, HideInInspector]	private bool				_blnHasNetworkTransform	= false;
 			[SerializeField, HideInInspector]	private bool				_blnUseEditor						= true;
-			[SerializeField, HideInInspector]	private bool				_blnUseDatabase					= true;
+			[SerializeField, HideInInspector]	private bool				_blnUseSQLDatabase			= true;
+			[SerializeField, HideInInspector]	private bool				_blnUseUnityDatabase		= false;
 			[SerializeField, HideInInspector]	private bool				_blnUseClassMgr					= true;
 			[SerializeField, HideInInspector]	private bool				_blnUseAppMgr						= false;
 			[SerializeField, HideInInspector]	private bool				_blnUseDBmgr						= true;
@@ -413,7 +442,8 @@ namespace CBT
 				strOut += Util.ConvertToInt(_blnIsNetworkObject).ToString()			+ "^";
 				strOut += Util.ConvertToInt(_blnHasNetworkTransform).ToString()	+ "^";
 				strOut += Util.ConvertToInt(_blnUseEditor).ToString()						+ "^";
-				strOut += Util.ConvertToInt(_blnUseDatabase).ToString()					+ "^";
+				strOut += Util.ConvertToInt(_blnUseSQLDatabase).ToString()			+ "^";
+				strOut += Util.ConvertToInt(_blnUseUnityDatabase).ToString()		+ "^";
 				strOut += Util.ConvertToInt(_blnUseClassMgr).ToString()					+ "^";
 				strOut += Util.ConvertToInt(_blnUseAppMgr).ToString()						+ "^";
 				strOut += Util.ConvertToInt(_blnUseDBmgr).ToString()						+ "^";
@@ -456,15 +486,16 @@ namespace CBT
 				_blnIsNetworkObject			= Util.ConvertToBoolean(strSpl2[8]);
 				_blnHasNetworkTransform	= Util.ConvertToBoolean(strSpl2[9]);
 				_blnUseEditor						= Util.ConvertToBoolean(strSpl2[10]);
-				_blnUseDatabase					= Util.ConvertToBoolean(strSpl2[11]);
-				_blnUseClassMgr					= Util.ConvertToBoolean(strSpl2[12]);
-				_blnUseAppMgr						= Util.ConvertToBoolean(strSpl2[13]);
-				_blnUseDBmgr						= Util.ConvertToBoolean(strSpl2[14]);
-				_blnUseNetMgr						= Util.ConvertToBoolean(strSpl2[15]);
-				_blnUseDBload						= Util.ConvertToBoolean(strSpl2[16]);
-				_blnUseDBsave						= Util.ConvertToBoolean(strSpl2[17]);
-				_blnUseSerialization		= Util.ConvertToBoolean(strSpl2[18]);
-				_DBuseWinAccount				= Util.ConvertToBoolean(strSpl2[19]);
+				_blnUseSQLDatabase			= Util.ConvertToBoolean(strSpl2[11]);
+				_blnUseUnityDatabase		= Util.ConvertToBoolean(strSpl2[12]);
+				_blnUseClassMgr					= Util.ConvertToBoolean(strSpl2[13]);
+				_blnUseAppMgr						= Util.ConvertToBoolean(strSpl2[14]);
+				_blnUseDBmgr						= Util.ConvertToBoolean(strSpl2[15]);
+				_blnUseNetMgr						= Util.ConvertToBoolean(strSpl2[16]);
+				_blnUseDBload						= Util.ConvertToBoolean(strSpl2[17]);
+				_blnUseDBsave						= Util.ConvertToBoolean(strSpl2[18]);
+				_blnUseSerialization		= Util.ConvertToBoolean(strSpl2[19]);
+				_DBuseWinAccount				= Util.ConvertToBoolean(strSpl2[20]);
 
 				// DESERIALIZE PROPERTIES PORTION
 				_vars = new List<ClassProperty>();
@@ -525,7 +556,8 @@ namespace CBT
 			public	bool				HasNetworkTransform	{	get { return _blnHasNetworkTransform	&& _blnUseNetMgr;	} set { _blnHasNetworkTransform = value; } }
 			public	bool				UseUnityUI					{ get { return _blnUseUnityUI;					} set { _blnUseUnityUI = value; } }
 			public	bool				UseEditor						{ get { return _blnUseEditor;						} set { _blnUseEditor = value; } }
-			public	bool				UseDatabase					{ get { return _blnUseDatabase;					} set { _blnUseDatabase = value; } }
+			public	bool				UseSQLDatabase			{ get { return _blnUseSQLDatabase;			} set { _blnUseSQLDatabase = value; } }
+			public	bool				UseUnityDatabase		{ get { return _blnUseUnityDatabase;		} set { _blnUseUnityDatabase = value; } }
 			public	bool				UseClassMgr					{ get { return _blnUseClassMgr;					} set { _blnUseClassMgr = value; } }
 			public	bool				UseAppMgr						{ get { return _blnUseAppMgr;						} set { _blnUseAppMgr = value; } }
 			public	bool				UseDBmgr						{ get { return _blnUseDBmgr;						} set { _blnUseDBmgr = value; } }
@@ -541,11 +573,6 @@ namespace CBT
 			public	bool				DBuseWinAccount			{ get { return _DBuseWinAccount;				} set { _DBuseWinAccount = value; } }
 
 			public	List<ClassProperty>		Variables	{ get { return _vars; } }
-			public	bool				HasVariableType(string strType)
-			{
-				List<ClassProperty> li = Variables.FindAll(x => x.VarType.ToLower() == strType.ToLower());
-				return (li != null && li.Count > 0);
-			}
 
 			public	string			Script_Directory
 			{
@@ -558,7 +585,7 @@ namespace CBT
 			{
 				get
 				{
-					if (UseDatabase)
+					if (UseSQLDatabase)
 					{ 
 						if (UseUnity && UseDBmgr)
 							return "Database.DAL.";
@@ -566,6 +593,18 @@ namespace CBT
 							return "DAL.";
 					} else
 						return "";
+				}
+			}
+			public	bool				HasVariableType(string strType)
+			{
+				List<ClassProperty> li = Variables.FindAll(x => x.VarType.ToLower() == strType.ToLower());
+				return (li != null && li.Count > 0);
+			}
+			public	bool				HasNamedVariable
+			{
+				get
+				{
+					return Variables.FindIndex(x => x.IsNameVar == true) >= 0;
 				}
 			}
 
@@ -633,6 +672,7 @@ namespace CBT
 							return "tbl" + this.ClassName;
 						case 2:
 							return this.ClassName.ToUpper();
+						// YOU CAN ADD YOUR OWN NAMING CONVENTIONS
 						default:
 							return "tbl" + this.ClassName;
 					}
@@ -648,6 +688,7 @@ namespace CBT
 							return "sp" + this.ClassName;
 						case 2:
 							return this.ClassName.ToUpper() + "_";
+						// YOU CAN ADD YOUR OWN NAMING CONVENTIONS
 						default:
 							return "sp" + this.ClassName;
 					}
@@ -692,6 +733,7 @@ namespace CBT
 						case "vector2":
 						case "vector3":
 						case "quaternion":
+						case "color":
 							strSQL += "('" + prop.StartingValue + "')";
 							break;
 						case "date":
@@ -755,9 +797,12 @@ namespace CBT
 					{
 						_strFileData += "[" + Variables[i].Name + "] [" + Variables[i].GetSQLtype2 + "]";
 						if (Variables[i].VarType.ToLower() == "string" ||
+								Variables[i].VarType.ToLower() == "sprite" ||
+								Variables[i].VarType.ToLower() == "image" ||
 								Variables[i].VarType.ToLower() == "vector2" ||
 								Variables[i].VarType.ToLower() == "vector3" ||
-								Variables[i].VarType.ToLower() == "quaternion")
+								Variables[i].VarType.ToLower() == "quaternion" ||
+								Variables[i].VarType.ToLower() == "color")
 							_strFileData += "(" + Variables[i].MaxLength.ToString() + ")";
 						else if (Variables[i].VarType.ToLower() == "float" ||
 										 Variables[i].VarType.ToLower() == "decimal" ||
@@ -929,6 +974,512 @@ namespace CBT
 				}			
 			}
 
+			// SCRIPT UNITY DATABASE FUNCTIONS
+			private void				CreateBaseDatabaseFile()
+			{
+				string strFileName = this.ClassName + "Database.cs";
+				_strFileData = "";
+
+				// COMMENTED HEADER
+				_strFileData += "//		AUTO-GENERATED FILE: " + strFileName + "\n";
+				_strFileData += "//		GENERATED ON       : " + System.DateTime.Now.ToString("ddd MMM dd yyyy - hh:mm:ss tt") + "\n";
+				_strFileData += "//		\n";
+				_strFileData += "//		This is the Base Class file.  It is not intended to be modified.\n";
+				_strFileData += "\n\n";
+
+				if (UseUnity)
+				{
+					_strFileData	+= "#if UNITY_EDITOR\n";
+					_strFileData	+= "using UnityEditor;\n";
+					_strFileData	+= "#endif\n";
+					_strFileData	+= "using UnityEngine;\n";
+					if (UseUnityUI)
+					_strFileData	+= "using UnityEngine.UI;\n";
+				}
+				_strFileData		+= "using System.Linq;\n";
+				_strFileData		+= "using System.Collections;\n";
+				_strFileData		+= "using System.Collections.Generic;\n";
+				_strFileData		+= "\n";
+
+				if (Namespace		!= "")
+					_strFileData	+= "namespace " + this.Namespace + "\n{\n\n";
+				_strFileData		+= "[System.Serializable]\n";
+				_strFileData		+= "public class " + this.ClassName + "Database : CBT.BaseDatabase<" + this.ClassName + "Base>\n{\n\n";
+
+				_strFileData		+= "		#region \"PUBLIC PROPERTIES\"\n\n";
+				_strFileData		+= "			public	override		int		MaxID\n";
+				_strFileData		+= "			{\n";
+				_strFileData		+= "				get\n";
+				_strFileData		+= "				{\n";
+				_strFileData		+= "					if (database == null)\n";
+				_strFileData		+= "							database = new List<" + this.ClassName + "Base>();\n";
+				_strFileData		+= "					if (Count > 0)\n";
+				_strFileData		+= "						return database[Count - 1].ID;\n";
+				_strFileData		+= "					else \n";
+				_strFileData		+= "						return 0;\n";
+				_strFileData		+= "				}\n";
+				_strFileData		+= "			}\n\n";
+				_strFileData		+= "		#endregion\n\n";
+
+				_strFileData		+= "		#region \"PUBLIC METHODS\"\n\n";
+				_strFileData		+= "			#if UNITY_EDITOR\n";
+				_strFileData		+= "			public	override		void						Add(				" + this.ClassName + "Base				added)\n";
+				_strFileData		+= "			{\n";
+				_strFileData		+= "				added.ID = MaxID + 1;\n";
+				_strFileData		+= "				added.Index = Count;\n";
+				_strFileData		+= "				base.Add(added);\n";
+				_strFileData		+= "			}\n";
+				_strFileData		+= "			public	override		void						Insert(			int			index, " + this.ClassName + "Base added)\n";
+				_strFileData		+= "			{\n";
+				_strFileData		+= "				added.ID = MaxID + 1;\n";
+				_strFileData		+= "				added.Index = index;\n";
+				_strFileData		+= "				base.Insert(index, added);\n";
+				_strFileData		+= "			}\n";
+				_strFileData		+= "			public	override		void						Save(				" + this.ClassName + "Base				added)\n";
+				_strFileData		+= "			{\n";
+				_strFileData		+= "				if (added.ID < 1 || added.Index < 0)\n";
+				_strFileData		+= "				{\n";
+				_strFileData		+= "					int i = -1;\n";
+				_strFileData		+= "					if (added.ID > 0)\n";
+				_strFileData		+= "						i = FindByID(added.ID);\n";
+				_strFileData		+= "					if (i < 0)\n";
+				_strFileData		+= "						Add(added);\n";
+				_strFileData		+= "					else\n";
+				_strFileData		+= "					{\n";
+				_strFileData		+= "						added.Index = i;\n";
+				_strFileData		+= "						database[i] = added;\n";
+				_strFileData		+= "					}\n";
+				_strFileData		+= "				} else {\n";
+				_strFileData		+= "					database[added.Index] = added;\n";
+				_strFileData		+= "				}\n";
+				_strFileData		+= "				EditorUtility.SetDirty(this);\n";
+				_strFileData		+= "			}\n";
+				_strFileData		+= "			public	override		void						Save(				int			index, " + this.ClassName + "Base added)\n";
+				_strFileData		+= "			{\n";
+				_strFileData		+= "				if (index < 0)\n";
+				_strFileData		+= "				{\n";
+				_strFileData		+= "					Add(added);\n";
+				_strFileData		+= "				} else {\n";
+				_strFileData		+= "					added.Index = index;\n";
+				_strFileData		+= "					database[index] = added;\n";
+				_strFileData		+= "					EditorUtility.SetDirty(this);\n";
+				_strFileData		+= "				}\n";
+				_strFileData		+= "			}\n";
+				_strFileData		+= "			#endif\n";
+				_strFileData		+= "			public	override		void						Init()\n";
+				_strFileData		+= "			{\n";
+				_strFileData		+= "				database = " + this.ClassName + "Base.LoadDatabase().database;\n";
+				_strFileData		+= "			}\n";
+				_strFileData		+= "			public	override		" + this.ClassName + "Base			GetByIndex(	int			index)\n";
+				_strFileData		+= "			{\n";
+				_strFileData		+= "				try\n";
+				_strFileData		+= "				{\n";
+				_strFileData		+= "					if (!IsDatabaseLoaded)\n";
+				_strFileData		+= "						database = " + this.ClassName + "Base.LoadDatabase().database;\n";
+				_strFileData		+= "					if (database != null && (database.ElementAt(index)) != null)\n";
+				_strFileData		+= "							database.ElementAt(index).Index = index;\n";
+				_strFileData		+= "					else\n";
+				_strFileData		+= "							index = -1;\n";
+				_strFileData		+= "				} catch { index = -1; }\n";
+				_strFileData		+= "				if (index < 0)\n";
+				_strFileData		+= "					return new " + this.ClassName + "Base();\n";
+				_strFileData		+= "				else\n";
+				_strFileData		+= "					return base.GetByIndex(index);\n";
+				_strFileData		+= "			}\n";
+				_strFileData		+= "			public	override		" + this.ClassName + "Base			GetByID(		int			intID)\n";
+				_strFileData		+= "			{\n";
+				_strFileData		+= "				if (intID < 0)\n";
+				_strFileData		+= "					return null;\n";
+				_strFileData		+= "				if (!IsDatabaseLoaded)\n";
+				_strFileData		+= "					database = " + this.ClassName + "Base.LoadDatabase().database;\n";
+				_strFileData		+= "				return database.Find(p => p.ID == intID);\n";
+				_strFileData		+= "			}\n\n";
+				_strFileData		+= "		#endregion\n\n";
+
+				_strFileData		+= "		#region \"PRIVATE/PROTECTED FUNCTIONS\"\n\n";
+				_strFileData		+= "			protected	override	int			FindByID(			int			intID)			// RETURN THE INDEX OF THE RECORD\n";
+				_strFileData		+= "			{\n";
+				_strFileData		+= "				if (intID < 1)\n";
+				_strFileData		+= "					return -1;\n";
+				_strFileData		+= "				for (int i = 0; i < Count; i++)\n";
+				_strFileData		+= "				{\n";
+				_strFileData		+= "					database.ElementAt(i).Index = i;\n";
+				_strFileData		+= "					if (database.ElementAt(i).ID == intID)\n";
+				_strFileData		+= "						return i;\n";
+				_strFileData		+= "				}\n";
+				_strFileData		+= "				return -1;\n";
+				_strFileData		+= "			}\n";
+				if (HasNamedVariable)
+				{
+					_strFileData	+= "			protected override int			FindByName(		string	strName)		// RETURN THE INDEX OF THE RECORD\n";
+					_strFileData	+= "			{\n";
+					_strFileData	+= "				if (strName.Trim() == \"\")\n";
+					_strFileData	+= "					return -1;\n";
+					_strFileData	+= "				for (int i = 0; i < Count; i++)\n";
+					_strFileData	+= "				{\n";
+					_strFileData	+= "					database.ElementAt(i).Index = i;\n";
+					_strFileData	+= "					if (database.ElementAt(i).Name == strName)\n";
+					_strFileData	+= "						return i;\n";
+					_strFileData	+= "				}\n";
+					_strFileData	+= "				return -1;\n";
+					_strFileData	+= "			}\n";
+				}
+				_strFileData		+= "\n";
+				_strFileData		+= "		#endregion\n\n";
+
+				_strFileData += "}\n\n";		// END CLASS
+
+				if (Namespace != "")
+					_strFileData += "}\n\n";	// END NAMESPACE
+
+				// WRITE THE FILE
+				Util.WriteTextFile(CLASS_SCRIPT_DIRECTORY, strFileName, _strFileData);
+			}
+			private void				CreateDatabaseEditorFile()
+			{
+				string strFileName = this.ClassName + "DatabaseEditor.cs";
+				_strFileData = "";
+
+				// COMMENTED HEADER
+				_strFileData += "//		AUTO-GENERATED FILE: " + strFileName + "\n";
+				_strFileData += "//		GENERATED ON       : " + System.DateTime.Now.ToString("ddd MMM dd yyyy - hh:mm:ss tt") + "\n";
+				_strFileData += "//		\n";
+				_strFileData += "//		This is the Base Class file.  It is not intended to be modified.\n";
+				_strFileData += "\n\n";
+
+				if (UseUnity)
+				{
+					_strFileData	+= "#if UNITY_EDITOR\n";
+					_strFileData	+= "using UnityEditor;\n";
+					_strFileData	+= "#endif\n";
+					_strFileData	+= "using UnityEngine;\n";
+					if (UseUnityUI)
+					_strFileData	+= "using UnityEngine.UI;\n";
+				}
+				_strFileData		+= "using System.Linq;\n";
+				_strFileData		+= "using System.Collections;\n";
+				_strFileData		+= "using System.Collections.Generic;\n";				_strFileData		+= "\n";
+
+				if (Namespace		!= "")
+					_strFileData	+= "namespace " + this.Namespace + "\n{\n\n";
+				_strFileData		+= "	public partial class " + this.ClassName + "DatabaseEditor : CBT.BaseDatabaseEditor<" + this.ClassName + "DatabaseEditor, " + this.ClassName + "Database, " + this.ClassName + "Base>\n{\n\n";
+
+				// PRIVATE/PROTECTED CONSTANTS
+				_strFileData		+= "		#region \"PRIVATE/PROTECTED CONSTANTS\"\n\n";
+				_strFileData		+= "			private 	const			string	WINDOW_TITLE						= \"" + this.ClassName + " DB\";\n";
+				_strFileData		+= "			private		const			string	MENU_BASE_NAME					= \"Database\";\n";
+				_strFileData		+= "			private		const			string	MENU_FILE_NAME					= \""  + this.ClassName + " Editor\";\n";
+				_strFileData		+= "			private		const			string	dDATABASE_FILE_DIR			= @\"Resources/Database\";\n";
+				_strFileData		+= "			private		const			string	dDATABASE_FILE_NAME			= @\"" + this.ClassName + "Database.asset\";\n\n";
+				_strFileData		+= "		#endregion\n\n";
+
+				// PRIVATE VARIABLES
+				_strFileData		+= "		#region \"PRIVATE VARIABLES\"\n\n";
+				_strFileData		+= "			private		int														_intSelected						= -1;\n";
+				_strFileData		+= "\n";
+				_strFileData		+= "		#endregion\n\n";
+
+				// EVENT FUNCTIONS
+				_strFileData		+= "		#region \"EVENT FUNCTIONS\"\n\n";
+				_strFileData		+= "			[MenuItem(MENU_BASE_NAME + \"/\" + MENU_FILE_NAME, false, 10)]\n";
+				_strFileData		+= "			public		static		void		Init()\n";
+				_strFileData		+= "			{\n";
+				_strFileData		+= "				" + this.ClassName + "DatabaseEditor window = EditorWindow.GetWindow<" + this.ClassName + "DatabaseEditor>();\n";
+				_strFileData		+= "				window.minSize = new Vector2(MINIMUM_WIDTH, MINIMUM_HEIGHT);\n";
+				_strFileData		+= "				window.titleContent.text = WINDOW_TITLE;\n";
+				_strFileData		+= "				window.Show();\n";
+				_strFileData		+= "			}\n";
+				_strFileData		+= "			protected override	void		Initialize()\n";
+				_strFileData		+= "			{\n";
+				_strFileData		+= "				if (IsInitialized || IsInitializing)\n";
+				_strFileData		+= "					return;\n";
+				_strFileData		+= "				_blnIsInitializing			= true;\n";
+				_strFileData		+= "				DATABASE_FILE_DIRECTORY	= dDATABASE_FILE_DIR;\n";
+				_strFileData		+= "				DATABASE_FILE_NAME			= dDATABASE_FILE_NAME;\n";
+				_strFileData		+= "				LoadDatabase();\n";
+				_strFileData		+= "				selected = null;\n";
+				_strFileData		+= "				_intSelected = -1;\n";
+				_strFileData		+= "				IsInitialized = true;\n";
+				_strFileData		+= "			}\n";
+				_strFileData		+= "			protected override	void		DisplayEditorWindow()\n";
+				_strFileData		+= "			{\n";
+				_strFileData		+= "				GUILayout.BeginVertical();\n";
+				_strFileData		+= "				DisplayEditorCommands();\n";
+				_strFileData		+= "				GUILayout.BeginHorizontal();\n";
+				_strFileData		+= "				ListView();\n";
+				_strFileData		+= "				try\n";
+				_strFileData		+= "				{\n";
+				_strFileData		+= "					if (selected != null)\n";
+				_strFileData		+= "						DisplayEditor();\n";
+				_strFileData		+= "				} catch { } \n";
+				_strFileData		+= "				GUILayout.EndHorizontal();\n";
+				_strFileData		+= "				GUILayout.EndVertical();\n";
+				_strFileData		+= "				DisplayCount();\n";
+				_strFileData		+= "			}\n";
+				_strFileData		+= "			protected	override	void		OnDisable()\n";
+				_strFileData		+= "			{\n";
+				_strFileData		+= "				base.OnDisable();\n";
+				_strFileData		+= "			}\n\n";
+				_strFileData		+= "		#endregion\n\n";
+
+				// PRIVATE FUNCTIONS
+				_strFileData		+= "		#region \"PRIVATE FUNCTIONS\"\n\n";
+				_strFileData		+= "			private							void							DisplayEditorCommands()\n";
+				_strFileData		+= "			{\n";
+				_strFileData		+= "				GUILayout.BeginVertical(\"box\");\n";
+				_strFileData		+= "				EditorGUILayout.LabelField(\"FILTERS: \");\n";
+//			_strFileData		+= "//			_intFilterSkillType			= EditorGUILayout.Popup(\"Skill: \",		_intFilterSkillType,		FilterSkillTypeArray);\n";
+				_strFileData		+= "				GUILayout.EndVertical();\n";
+				_strFileData		+= "			}\n";
+				_strFileData		+= "			protected override	void							DisplayEditor()\n";
+				_strFileData		+= "			{\n";
+				_strFileData		+= "				DisplayEditorTop();\n";
+				_strFileData		+= "				" + this.ClassName + "Base theObject = ((" + this.ClassName + "Base)(object)selected);\n";
+				_strFileData		+= "				if (_intSelected != theObject.ID)\n";
+				_strFileData		+= "				{\n";
+				_strFileData		+= "					_intSelected		= theObject.ID;\n";
+				_strFileData		+= "				}\n";
+				_strFileData		+= "				_v2ScrollEPosition = EditorGUILayout.BeginScrollView(_v2ScrollEPosition, GUILayout.ExpandHeight(true));\n";
+
+				int intCnt = 0;
+				for (int i = 0; i < Variables.Count; i++)
+				{
+					if (!Variables[i].IsDeleted)
+					{ 
+						switch (Variables[i].VarType.ToLower())
+						{
+							case "string":
+								if (Variables[i].IsIndex)
+									_strFileData += "				EditorGUILayout.LabelField(\"" + Variables[i].Name + "\", theObject." + Variables[i].Name + ");\n";
+								else
+									_strFileData += "				theObject." + Variables[i].Name + "	= EditorGUILayout.TextField(\"" + Variables[i].Name + "\", theObject." + Variables[i].Name + ");\n";
+								break;
+							case "int":
+								if (Variables[i].IsIndex || Variables[i].Name.ToLower() == "index")
+									_strFileData += "				EditorGUILayout.LabelField(\"" + Variables[i].Name + "\", theObject." + Variables[i].Name + ".ToString());\n";
+								else
+									_strFileData += "				theObject." + Variables[i].Name + "	= EditorGUILayout.IntField(\"" + Variables[i].Name + "\", theObject." + Variables[i].Name + ");\n";
+								break;
+							case "bool":
+								if (Variables[i].IsIndex)
+									_strFileData += "				EditorGUILayout.Toggle(\"" + Variables[i].Name + "\", theObject." + Variables[i].Name + ");\n";
+								else
+									_strFileData += "				theObject." + Variables[i].Name + "	= EditorGUILayout.Toggle(\"" + Variables[i].Name + "\", theObject." + Variables[i].Name + ");\n";
+								break;
+							case "float":
+								if (Variables[i].IsIndex)
+									_strFileData += "				EditorGUILayout.LabelField(\"" + Variables[i].Name + "\", theObject." + Variables[i].Name + ".ToString());\n";
+								else
+									_strFileData += "				theObject." + Variables[i].Name + "	= EditorGUILayout.FloatField(\"" + Variables[i].Name + "\", theObject." + Variables[i].Name + ");\n";
+								break;
+							case "sprite":
+							case "image":
+									_strFileData += "				theObject." + Variables[i].Name + "Sprite	= (Sprite) EditorGUILayout.ObjectField(	\"Icon: \",	theObject." + Variables[i].Name + "Sprite, typeof(Sprite), true);\n";
+									_strFileData += "																							 EditorGUILayout.TextField(		\"Path: \",	theObject." + Variables[i].Name + "String);\n";
+								break;
+							case "vector2":
+								if (Variables[i].IsIndex)
+									_strFileData += "				EditorGUILayout.Vector2Field(\"" + Variables[i].Name + "\", theObject." + Variables[i].Name + ");\n";
+								else
+									_strFileData += "				theObject." + Variables[i].Name + "	= EditorGUILayout.Vector2Field(\"" + Variables[i].Name + "\", theObject." + Variables[i].Name + ");\n";
+								break;
+							case "vector3":
+								if (Variables[i].IsIndex)
+									_strFileData += "				EditorGUILayout.Vector3Field(\"" + Variables[i].Name + "\", theObject." + Variables[i].Name + ");\n";
+								else
+									_strFileData += "				theObject." + Variables[i].Name + "	= EditorGUILayout.Vector3Field(\"" + Variables[i].Name + "\", theObject." + Variables[i].Name + ");\n";
+								break;
+							case "quaternion":
+								_strFileData += "\n";
+								_strFileData += "				if (v4Temp[" + intCnt.ToString() + "]	== null)\n			{\n";
+								_strFileData += "					v4Temp[" + intCnt.ToString() + "] = Vector4.zero;\n";
+								_strFileData += "					v4Temp[" + intCnt.ToString() + "].x = theObject." + Variables[i].Name + ".x;\n";
+								_strFileData += "					v4Temp[" + intCnt.ToString() + "].y = theObject." + Variables[i].Name + ".y;\n";
+								_strFileData += "					v4Temp[" + intCnt.ToString() + "].z = theObject." + Variables[i].Name + ".z;\n";
+								_strFileData += "					v4Temp[" + intCnt.ToString() + "].w = theObject." + Variables[i].Name + ".w;\n";
+								_strFileData += "				}\n";
+								_strFileData += "				if (v4[" + intCnt.ToString() + "]			== null)		v4[" + intCnt.ToString() + "]	= v4Temp[" + intCnt.ToString() + "];\n";
+								_strFileData += "				v4[" + intCnt.ToString() + "] = EditorGUILayout.Vector4Field(\"" + Variables[i].Name + "\", v4Temp[" + intCnt.ToString() + "]);\n";
+								_strFileData += "				if (v4[" + intCnt.ToString() + "] != v4Temp[" + intCnt.ToString() + "])\n			{\n";
+								_strFileData += "					q3 = Quaternion.identity;\n";
+								_strFileData += "					q3.x = v4[" + intCnt.ToString() + "].x;\n";
+								_strFileData += "					q3.y = v4[" + intCnt.ToString() + "].y;\n";
+								_strFileData += "					q3.z = v4[" + intCnt.ToString() + "].z;\n";
+								_strFileData += "					q3.w = v4[" + intCnt.ToString() + "].w;\n";
+								_strFileData += "					theObject." + Variables[i].Name + " = q3;\n";
+								_strFileData += "					v4Temp[" + intCnt.ToString() + "] = v4[" + intCnt.ToString() + "];\n";
+								_strFileData += "				}\n\n";
+								intCnt++;
+								break;
+							case "color":
+								if (Variables[i].IsIndex)
+									_strFileData += "				EditorGUILayout.ColorField(\"" + Variables[i].Name + "\", theObject." + Variables[i].Name + ");\n";
+								else
+									_strFileData += "				theObject." + Variables[i].Name + "	= EditorGUILayout.ColorField(\"" + Variables[i].Name + "\", theObject." + Variables[i].Name + ");\n";
+								break;
+							case "date":
+							case "datetime":
+								_strFileData += "				EditorGUILayout.LabelField(\"" + Variables[i].Name + "\", theObject." + Variables[i].Name + ".ToString(\"MM/dd/yyyy HH:mm:ss\"));\n";
+								break;
+							default:
+								if (Variables[i].VarType.ToLower().Contains("enum"))
+								{
+									_strFileData += "				theObject." + Variables[i].Name + "Int = EditorGUILayout.Popup(\"" + Variables[i].Name + "\", theObject." + Variables[i].Name + "Int, ";
+									_strFileData +="CreateEnumDefaultPopUpListByName(DBenums, \"" + Variables[i].VarType + "\"));\n";
+								}
+								break;
+
+						}
+					}
+				}
+				_strFileData		+= "				GUILayout.Space(10);\n\n";
+				_strFileData		+= "				EditorGUILayout.EndScrollView();\n";
+				_strFileData		+= "				GUILayout.EndVertical();\n";
+				_strFileData		+= "				GUILayout.Space(10);\n";
+
+				_strFileData		+= "				GUILayout.BeginHorizontal();\n";
+				_strFileData		+= "				if (GUILayout.Button(\"SAVE\"))\n";
+				_strFileData		+= "				{\n";
+				_strFileData		+= "					if (selected != null" + ((HasNamedVariable) ? " && selected.Name.Trim() != \"\"" : "") + ")\n";
+				_strFileData		+= "					{\n";
+				_strFileData		+= "						selected.DateUpdated = System.DateTime.Now;\n";
+				_strFileData		+= "						((CBT.BaseDatabase<" + this.ClassName + "Base>)(object)editorDB).Save(theObject);\n";
+				_strFileData		+= "						selected = null;\n";
+				_strFileData		+= "						_intSelected = -1;\n";
+				_strFileData		+= "						GUI.FocusControl(\"\");\n";
+				_strFileData		+= "					}\n";
+				_strFileData		+= "				}\n";
+				_strFileData		+= "				DisplayEditorBottom();\n";
+				_strFileData		+= "			}\n";
+				_strFileData		+= "			protected override	void							DisplayCount()\n";
+				_strFileData		+= "			{\n";
+				_strFileData		+= "				try { GUILayout.BeginHorizontal(\"Box\", GUILayout.ExpandWidth(true));  } catch { }\n";
+				_strFileData		+= "				GUILayout.Label(\"Record Count: \" + ((CBT.BaseDatabase<" + this.ClassName + "Base>)(object)editorDB).Count.ToString() + \" - (Hold CTRL to Delete a Record)\");\n";
+				_strFileData		+= "				if (selected == null)\n";
+				_strFileData		+= "				{\n";
+				_strFileData		+= "					if (GUILayout.Button(\"Add New\"))\n";
+				_strFileData		+= "					{\n";
+				_strFileData		+= "						selected = (" + this.ClassName + "Base)(object)new " + this.ClassName + "Base();\n";
+				_strFileData		+= "						_intSelected = selected.ID;\n";
+				_strFileData		+= "					}\n";
+				_strFileData		+= "					if (GUILayout.Button(\"Export\"))\n";
+				_strFileData		+= "						" + this.ClassName + "Base.Export();\n";
+				_strFileData		+= "				}\n";
+				_strFileData		+= "				GUILayout.EndHorizontal();\n";
+				_strFileData		+= "			}\n\n";
+				_strFileData		+= "		#endregion\n\n";
+				_strFileData += "}\n\n";		// END CLASS
+
+				if (Namespace != "")
+					_strFileData += "}\n\n";	// END NAMESPACE
+
+				// WRITE THE FILE
+				Util.WriteTextFile(CLASS_SCRIPT_DIRECTORY + "/Editor", strFileName, _strFileData);
+			}
+			private void				CreateDatabaseListViewFile()
+			{
+				string strFileName = this.ClassName + "EditorListView.cs";
+				_strFileData = "";
+
+				// COMMENTED HEADER
+				_strFileData += "//		AUTO-GENERATED FILE: " + strFileName + "\n";
+				_strFileData += "//		GENERATED ON       : " + System.DateTime.Now.ToString("ddd MMM dd yyyy - hh:mm:ss tt") + "\n";
+				_strFileData += "//		\n";
+				_strFileData += "//		This is the Base Class file.  It is not intended to be modified.\n";
+				_strFileData += "\n\n";
+
+				if (UseUnity)
+				{
+					_strFileData	+= "#if UNITY_EDITOR\n";
+					_strFileData	+= "using UnityEditor;\n";
+					_strFileData	+= "#endif\n";
+					_strFileData	+= "using UnityEngine;\n";
+					if (UseUnityUI)
+					_strFileData	+= "using UnityEngine.UI;\n";
+				}
+				_strFileData		+= "using System.Linq;\n";
+				_strFileData		+= "using System.Collections;\n";
+				_strFileData		+= "using System.Collections.Generic;\n";				_strFileData		+= "\n";
+
+				if (Namespace		!= "")
+					_strFileData	+= "namespace " + this.Namespace + "\n{\n\n";
+				_strFileData		+= "	public partial class " + this.ClassName + "DatabaseEditor : CBT.BaseDatabaseEditor<" + this.ClassName + "DatabaseEditor, " + this.ClassName + "Database, " + this.ClassName + "Base>\n{\n\n";
+
+				_strFileData		+= "		#region \"PRIVATE FUNCTIONS\"\n\n";
+				_strFileData		+= "			protected	override	void	DisplayList()\n";
+				_strFileData		+= "			{\n";
+				_strFileData		+= "				GUIStyle savedStyle = GUI.skin.GetStyle(\"Label\");\n";
+				_strFileData		+= "				savedStyle.alignment = TextAnchor.MiddleLeft;\n";
+				_strFileData		+= "				for (int i = 0; i < editorDB.Count; i++)\n";
+				_strFileData		+= "				{\n";
+				_strFileData		+= "					bool blnFound = true;			// (_intFilterSkillType < 1);\n";
+/*
+				_strFileData		+= "//				if (!blnFound)\n";
+				_strFileData		+= "//				{\n";
+				_strFileData		+= "//					blnFound = true;\n";
+				_strFileData		+= "//					if ((_intFilterSkillType		> 0 && _intFilterSkillType		!= editorDB.database[i].SkillID) )\n";
+				_strFileData		+= "//							blnFound = false;\n";
+				_strFileData		+= "//				}\n";
+*/
+				_strFileData		+= "					if (blnFound)\n";
+				_strFileData		+= "					{\n";
+				_strFileData		+= "						GUILayout.BeginHorizontal(\"Box\");\n";
+				_strFileData		+= "						bool blnDel = (Event.current.control); \n";
+				_strFileData		+= "						bool blnRep = (blnDel != _blnSaveCtrlKey);\n";
+				_strFileData		+= "						_blnSaveCtrlKey	= blnDel;\n";
+				_strFileData		+= "						if (!blnDel)\n";
+				_strFileData		+= "						{\n";
+				_strFileData		+= "							if (GUILayout.Button(\"?\", GUILayout.Width(16), GUILayout.Height(16)))\n";
+				_strFileData		+= "							{\n";
+				_strFileData		+= "								GUI.FocusControl(\"\");\n";
+				_strFileData		+= "								selected = new " + this.ClassName + "Base(editorDB.GetByIndex(i));\n";
+				_strFileData		+= "							}\n";
+				_strFileData		+= "							if (blnRep)\n";
+				_strFileData		+= "									Repaint();\n";
+				_strFileData		+= "						} else {\n";
+				_strFileData		+= "							GUIStyle style = new GUIStyle(GUI.skin.button);\n";
+				_strFileData		+= "							style.normal.textColor = Color.yellow;\n";
+				_strFileData		+= "							if (GUILayout.Button(\"X\", style, GUILayout.Width(16), GUILayout.Height(16)) && blnDel)\n";
+				_strFileData		+= "							{\n";
+				_strFileData		+= "								if (EditorUtility.DisplayDialog(\"Delete this Record?\", \"Are you sure that you want to delete \\\"\" + editorDB.GetByIndex(i).Name + \"\\\"?\", \"Delete\", \"Cancel\"))\n";
+				_strFileData		+= "								{\n";
+				_strFileData		+= "									selected = new " + this.ClassName + "Base(editorDB.GetByName(editorDB.database[i].Name));\n";
+				_strFileData		+= "									editorDB.Delete(selected.Index);\n";
+				_strFileData		+= "									GUI.FocusControl(\"\");\n";
+				_strFileData		+= "									selected = null;\n";
+				_strFileData		+= "								}\n";
+				_strFileData		+= "							}\n";
+				_strFileData		+= "							if (blnRep)\n";
+				_strFileData		+= "									Repaint();\n";
+				_strFileData		+= "						}\n";
+				_strFileData		+= "						try \n";
+				_strFileData		+= "						{\n";
+				_strFileData		+= "							string st = editorDB.GetByIndex(i).Name;\n";
+				_strFileData		+= "							if (GUILayout.Button(st, \"Label\", GUILayout.ExpandWidth(true)))\n";
+				_strFileData		+= "							{\n";
+				_strFileData		+= "								GUI.FocusControl(\"\");\n";
+				_strFileData		+= "								selected = new " + this.ClassName + "Base(editorDB.GetByIndex(i));\n";
+				_strFileData		+= "							}\n";
+				_strFileData		+= "							if (blnRep)\n";
+				_strFileData		+= "								Repaint();\n";
+				_strFileData		+= "						} catch {\n";
+				_strFileData		+= "							GUILayout.Label(\"No Action #\" + i.ToString() + \" of \" + editorDB.Count.ToString(), savedStyle); \n";
+				_strFileData		+= "						}\n";
+				_strFileData		+= "						GUILayout.EndHorizontal();\n";
+				_strFileData		+= "					}\n";
+				_strFileData		+= "				}\n";
+				_strFileData		+= "			}\n\n";
+				_strFileData		+= "		#endregion\n\n";
+
+				_strFileData += "}\n\n";		// END CLASS
+
+				if (Namespace != "")
+					_strFileData += "}\n\n";	// END NAMESPACE
+
+				// WRITE THE FILE
+					Util.WriteTextFile(CLASS_SCRIPT_DIRECTORY + "/Editor", strFileName, _strFileData);
+			}
+
 			// SCRIPT BUILDING FUNCTIONS
 			private	void				CreateCSbaseFile()
 			{
@@ -955,14 +1506,19 @@ namespace CBT
 
 
 				if (UseUnity)
+				{
+					_strFileData	+= "#if UNITY_EDITOR\n";
+					_strFileData	+= "using UnityEditor;\n";
+					_strFileData	+= "#endif\n";
 					_strFileData	+= "using UnityEngine;\n";
-				if (UseUnity && UseUnityUI)
-					_strFileData	+= "using UnityEngine.UI;\n";
-				if (IsANetworkObject)
-					_strFileData	+= "using UnityEngine.Networking;\n";
+					if (UseUnityUI)
+						_strFileData	+= "using UnityEngine.UI;\n";
+					if (IsANetworkObject)
+						_strFileData	+= "using UnityEngine.Networking;\n";
+				}
 				_strFileData		+= "using System.Collections;\n";
 				_strFileData		+= "using System.Collections.Generic;\n";
-				if (UseDatabase)
+				if (UseSQLDatabase)
 					_strFileData	+= "using System.Data;\n";
 				_strFileData		+= "\n";
 
@@ -970,15 +1526,30 @@ namespace CBT
 					_strFileData	+= "namespace " + this.Namespace + "\n{\n\n";
 				if (UseUnity)
 				{
-					if (IsANetworkObject)
-					{
+					if (UseUnityDatabase)
+					{ 
+						_strFileData	+= "[System.Serializable]\n";
+						_strFileData	+= "public class " + strFileName + "\n{\n\n";
+					} else if (IsANetworkObject) {
 						if (HasNetworkTransform)
 						_strFileData	+= "[RequireComponent(typeof(NetworkTransform))]\n";
 						_strFileData	+= "public class " + strFileName + " : NetworkBehaviour\n{\n\n";
-					} else
+					} else if (this.UseClassMgr || this.UseEditor) {
 						_strFileData	+= "public class " + strFileName + " : MonoBehaviour\n{\n\n";
+					} else {
+						_strFileData	+= "public class " + strFileName + "\n{\n\n";
+					}
 				} else
-					_strFileData	+= "public class " + strFileName + "\n{\n\n";
+						_strFileData	+= "public class " + strFileName + "\n{\n\n";
+
+				// BUILD PROTECTED CONSTANT REGION		---------------------------------------------
+				if (UseUnityDatabase)
+				{
+					_strFileData += "	#region \"PRIVATE CONSTANTS\"\n\n";
+					_strFileData += "		protected	static	string		DATABASE_FILE_DIRECTORY	= @\"Resources/Database\";\n";
+					_strFileData += "		protected	static	string		DATABASE_FILE_NAME			= @\"" + this.ClassName + "Database.asset\";\n\n";
+					_strFileData += "	#endregion\n\n";
+				}
 
 				// BUILD PRIVATE VARIABLE REGION		-----------------------------------------------
 				_strFileData		+= "	#region \"PRIVATE VARIABLES\"\n\n";
@@ -989,31 +1560,37 @@ namespace CBT
 						if (Variables[i].IsIndex)
 							_strFileData += "		// INDEX VARIABLE\n";
 						if (IsANetworkObject && Variables[i].IsSynchVar)
-						_strFileData += "		" + strSync + "protected	" + GetPropertyType(Variables[i]) + "		" + Variables[i].GetPrivatePrefix + Variables[i].Name;
-						else
-						_strFileData += "		" + strSer + "protected	" + GetPropertyType(Variables[i]) + "		" + Variables[i].GetPrivatePrefix + Variables[i].Name;
-						if (Variables[i].VarType.ToLower() == "vector2" ||
-								Variables[i].VarType.ToLower() == "vector2" ||
-								Variables[i].VarType.ToLower() == "vector2" ||
-								Variables[i].VarType.ToLower() == "vector3" ||
-								Variables[i].VarType.ToLower() == "quaternion")
-							_strFileData += ";\n";
-						else if ((Variables[i].VarType.ToLower() == "date" ||
-											Variables[i].VarType.ToLower() == "datetime"))
+							_strFileData += "		" + strSync + "protected	" + GetPropertyType(Variables[i]) + "		" + Variables[i].GetPrivatePrefix + Variables[i].Name;
+						else if (Variables[i].VarType.ToLower() == "sprite" || Variables[i].VarType.ToLower() == "image")
 						{
-							if (Variables[i].StartingValue == "")
-								_strFileData += " = System.DateTime.Parse(\"01/01/1900\");\n";
+							_strFileData += "		[SerializeField]				protected string		_strImg" + Variables[i].Name + "	= \"\";\n";
+							_strFileData += "		[System.NonSerialized]	protected Sprite		_sprImg" + Variables[i].Name + "	= null;\n";
+						} else {
+							_strFileData += "		" + strSer + "protected	" + GetPropertyType(Variables[i]) + "		" + Variables[i].GetPrivatePrefix + Variables[i].Name;
+
+							if (Variables[i].VarType.ToLower() == "vector2" ||
+									Variables[i].VarType.ToLower() == "vector2" ||
+									Variables[i].VarType.ToLower() == "vector2" ||
+									Variables[i].VarType.ToLower() == "vector3" ||
+									Variables[i].VarType.ToLower() == "quaternion")
+								_strFileData += ";\n";
+							else if ((Variables[i].VarType.ToLower() == "date" ||
+												Variables[i].VarType.ToLower() == "datetime"))
+							{
+								if (Variables[i].StartingValue == "")
+									_strFileData += " = System.DateTime.Now;\n";
+								else
+									_strFileData += " = System.DateTime.Parse(\"" + Variables[i].StartingValue + "\");\n";
+							}
+							else if (Variables[i].VarType.ToLower() == "string")
+								_strFileData += "	=	\"" + Variables[i].StartingValue + "\";\n";
+							else if (Variables[i].VarType.ToLower() == "float")
+								_strFileData += "	=	" + Variables[i].StartingValue + "f;\n";
+							else if (Variables[i].VarType.ToLower().StartsWith("enum"))
+								_strFileData += " = (" + GetPropertyType(Variables[i]) + ") " + Variables[i].StartingValue + ";\n";
 							else
-								_strFileData += " = System.DateTime.Parse(\"" + Variables[i].StartingValue + "\");\n";
+								_strFileData += "	=	" + Variables[i].StartingValue + ";\n";
 						}
-						else if (Variables[i].VarType.ToLower() == "string")
-							_strFileData += "	=	\"" + Variables[i].StartingValue + "\";\n";
-						else if (Variables[i].VarType.ToLower() == "float")
-							_strFileData += "	=	" + Variables[i].StartingValue + "f;\n";
-						else if (Variables[i].VarType.ToLower().StartsWith("enum"))
-							_strFileData += " = (" + GetPropertyType(Variables[i]) + ") " + Variables[i].StartingValue + ";\n";
-						else
-							_strFileData += "	=	" + Variables[i].StartingValue + ";\n";
 					}
 				}
 				if (IsANetworkObject)
@@ -1049,7 +1626,7 @@ namespace CBT
 					_strFileData += "				if (_dbm == null)		_dbm = DatabaseManager.Instance;\n";
 					_strFileData += "					return _dbm;\n			}\n";
 					_strFileData += "		}\n";
-				} else if (UseDatabase) {
+				} else if (UseSQLDatabase) {
 					_strFileData += "		private	ClsDAL				_DAL				= null;\n";
 					_strFileData += "		private string				_DBserver		= \"" + DBserver.Replace("\\", "\\\\") + "\";\n";
 					_strFileData += "		private string				_DBdatabase	= \"" + DBdatabase + "\";\n";
@@ -1084,104 +1661,242 @@ namespace CBT
 					_strFileData += "			set { _netConn = value; }\n";
 					_strFileData += "		}\n";
 				}
+				bool blnIndexedID = false;
 				for (int i = 0; i < Variables.Count; i++)
 				{
 					if (!Variables[i].IsDeleted)
 					{ 
-						if (Variables[i].IsIndex)
-						{ 
-							_strFileData += "		// INDEX VARIABLE\n";
-							_strFileData		+= "		public	" + GetPropertyType(Variables[i]) + "		ID\n		{\n";
-							_strFileData		+= "			get { return " + Variables[i].GetPrivatePrefix + Variables[i].Name + "; }\n";
-							_strFileData		+= "		}\n";
-							_strFileData += "		// INDEX VARIABLE\n";
-						}
-						_strFileData		+= "		public	" + GetPropertyType(Variables[i]) + "		" + Variables[i].Name + "\n		{\n";
-						_strFileData		+= "			get { return " + Variables[i].GetPrivatePrefix + Variables[i].Name + "; }\n";
-						if (!Variables[i].IsIndex)
-							_strFileData	+= "			set { " + Variables[i].GetPrivatePrefix + Variables[i].Name + " = value; }\n";
-						_strFileData		+= "		}\n";
-
-
-						if (Variables[i].VarType.ToLower().StartsWith("enum"))
+						if (Variables[i].VarType.ToLower() == "sprite" || Variables[i].VarType.ToLower() == "image")
 						{
-							_strFileData	+= "		public	int		" + Variables[i].Name + "Int\n		{\n";
-							_strFileData	+= "			get { return (int) " + Variables[i].GetPrivatePrefix + Variables[i].Name + "; }\n";
-							_strFileData	+= "			set { " + Variables[i].GetPrivatePrefix + Variables[i].Name + " = (" + Variables[i].VarType.Substring(4) + ") value; }\n";
+							_strFileData	+= "		public	Sprite	" + Variables[i].Name + "Sprite\n";
+							_strFileData	+= "		{\n";
+							_strFileData	+= "			get\n";
+							_strFileData	+= "			{\n";
+							_strFileData	+= "				if (_sprImg" + Variables[i].Name + " == null)\n";
+							_strFileData	+= "					GetSprite(ref _sprImg" + Variables[i].Name + ", ref _strImg" + Variables[i].Name + ");\n";
+							_strFileData	+= "				return _sprImg" + Variables[i].Name + ";\n";
+							_strFileData	+= "			}\n";
+							_strFileData	+= "			set \n";
+							_strFileData	+= "			{\n";
+							_strFileData	+= "				_sprImg" + Variables[i].Name + " = value;\n";
+							_strFileData	+= "				SetSprite(ref _sprImg" + Variables[i].Name + ", ref _strImg" + Variables[i].Name + ");\n";
+							_strFileData	+= "			}\n";
 							_strFileData	+= "		}\n";
-							_strFileData	+= "		// ENUM DECLARATION\n";
-							_strFileData	+= "		public	enum	" + Variables[i].VarType.Substring(4) + " : int	{ ";
-							eb = dbEnums.GetByName(Variables[i].VarType.Substring(4));
-							for (int e = 0; e < eb.Variables.Count; e++)
-								_strFileData += eb.Variables[e].Name + "=" + e.ToString() + ", ";
-							_strFileData = _strFileData.Substring(0, _strFileData.Length - 2);
-							_strFileData	+= " };\n";
-						}
+							_strFileData	+= "		public	string	" + Variables[i].Name + "String\n";
+							_strFileData	+= "		{\n";
+							_strFileData	+= "			get\n";
+							_strFileData	+= "			{\n";
+							_strFileData	+= "				return _strImg" + Variables[i].Name + ";\n";
+							_strFileData	+= "			}\n";
+							_strFileData	+= "		}\n";
+						} else {
+							if (Variables[i].IsIndex && !blnIndexedID)
+							{ 
+								blnIndexedID = true;
+								_strFileData	+= "		// INDEX VARIABLE\n";
+								_strFileData	+= "		public	" + GetPropertyType(Variables[i]) + "		ID\n		{\n";
+								_strFileData	+= "			get { return " + Variables[i].GetPrivatePrefix + Variables[i].Name + "; }\n";
+								if (UseUnityDatabase)
+								_strFileData	+= "			set { " + Variables[i].GetPrivatePrefix + Variables[i].Name + " = value; }\n";
+								_strFileData	+= "		}\n";
+								_strFileData	+= "		// INDEX VARIABLE\n";
+							}
+							_strFileData		+= "		public	" + GetPropertyType(Variables[i]) + "		" + Variables[i].Name + "\n		{\n";
+							_strFileData		+= "			get { return " + Variables[i].GetPrivatePrefix + Variables[i].Name + "; }\n";
+							if (!Variables[i].IsIndex || UseUnityDatabase)
+								_strFileData	+= "			set { " + Variables[i].GetPrivatePrefix + Variables[i].Name + " = value; }\n";
+							_strFileData		+= "		}\n";
 
+
+							if (Variables[i].VarType.ToLower().StartsWith("enum"))
+							{
+								_strFileData	+= "		public	int		" + Variables[i].Name + "Int\n		{\n";
+								_strFileData	+= "			get { return (int) " + Variables[i].GetPrivatePrefix + Variables[i].Name + "; }\n";
+								_strFileData	+= "			set { " + Variables[i].GetPrivatePrefix + Variables[i].Name + " = (" + Variables[i].VarType.Substring(4) + ") value; }\n";
+								_strFileData	+= "		}\n";
+								_strFileData	+= "		// ENUM DECLARATION\n";
+								_strFileData	+= "		public	enum	" + Variables[i].VarType.Substring(4) + " : int	{ ";
+								eb = dbEnums.GetByName(Variables[i].VarType.Substring(4));
+								for (int e = 0; e < eb.Variables.Count; e++)
+									_strFileData += eb.Variables[e].Name + "=" + eb.Variables[e].IntValue.ToString() + ", ";
+								_strFileData = _strFileData.Substring(0, _strFileData.Length - 2);
+								_strFileData	+= " };\n";
+							}
+
+							if (Variables[i].IsNameVar && Variables[i].VarType == "string")
+							{
+								_strFileData		+= "		public	" + GetPropertyType(Variables[i]) + "		Name\n		{\n";
+								_strFileData		+= "			get { return " + Variables[i].GetPrivatePrefix + Variables[i].Name + "; }\n";
+								if (!Variables[i].IsIndex || UseUnityDatabase)
+									_strFileData	+= "			set { " + Variables[i].GetPrivatePrefix + Variables[i].Name + " = value; }\n";
+								_strFileData		+= "		}\n";
+							}
+						}
 					}
 				}
 				_strFileData += "\n	#endregion\n\n";
 
+				// BUILD UNITY DATABASE FUNCTIONS REGION		-----------------------------------------------
+				if (UseUnityDatabase)
+				{
+					_strFileData += "	#region \"PUBLIC STATIC FUNCTIONS\"\n\n";
+					_strFileData += "		public	static	CBT.BaseDatabase<" + this.ClassName + "Base>			LoadDatabase()\n";
+					_strFileData += "		{\n";
+					_strFileData += "			#if !UNITY_EDITOR\n\n";
+					_strFileData += "			return Import();\n\n";
+					_strFileData += "			#else\n\n";
+					_strFileData += "			CBT.BaseDatabase<" + this.ClassName + "Base> db = null;\n";
+					_strFileData += "			string strDBfullPath = @\"Assets/\" + DATABASE_FILE_DIRECTORY + \"/\" + DATABASE_FILE_NAME;\n";
+					_strFileData += "			try\n";
+					_strFileData += "			{\n";
+					_strFileData += "				// db = ScriptableObject.CreateInstance<CBT.BaseDatabase<" + this.ClassName + "Base>>();\n";
+					_strFileData += "				if (!System.IO.Directory.Exists(@\"Assets/\" + DATABASE_FILE_DIRECTORY))\n";
+					_strFileData += "				{\n";
+					_strFileData += "					System.IO.Directory.CreateDirectory(@\"Assets/\" + DATABASE_FILE_DIRECTORY);\n";
+					_strFileData += "				} else {\n";
+					_strFileData += "					db = AssetDatabase.LoadAssetAtPath(strDBfullPath, typeof(CBT.BaseDatabase<" + this.ClassName + "Base>)) as CBT.BaseDatabase<" + this.ClassName + "Base>;\n";
+					_strFileData += "				}\n";
+					_strFileData += "				if (db == null)\n";
+					_strFileData += "				{\n";
+					_strFileData += "					db = ScriptableObject.CreateInstance<CBT.BaseDatabase<" + this.ClassName + "Base>>();\n";
+					_strFileData += "					AssetDatabase.CreateAsset(db, strDBfullPath);\n";
+					_strFileData += "					AssetDatabase.SaveAssets();\n";
+					_strFileData += "					AssetDatabase.Refresh();\n";
+					_strFileData += "				}\n";
+					_strFileData += "				db.IsDatabaseLoaded = (db != null);\n";
+					_strFileData += "				// INITIALIZE INDEX\n";
+					_strFileData += "				if (db != null && db.database != null && db.database.Count > 0)\n";
+					_strFileData += "				{\n";
+					_strFileData += "					for (int i = 0; i < db.database.Count; i++)\n";
+					_strFileData += "					{\n";
+					_strFileData += "						db.database[i].Index = 0;\n";
+					_strFileData += "					}\n";
+					_strFileData += "				}\n";
+					_strFileData += "			} catch {\n";
+					_strFileData += "				Debug.LogError(\"Error Loading \" + db.name.ToString() + \" \\\"\" + DATABASE_FILE_NAME + \"\\\"  (\" + strDBfullPath + \")\");\n";
+					_strFileData += "				return null;\n";
+					_strFileData += "			}\n";
+					_strFileData += "			return db;\n";
+					_strFileData += "			#endif\n";
+					_strFileData += "		}\n";
+					_strFileData += "		public	static	void														Export()\n";
+					_strFileData += "		{\n";
+					_strFileData += "			CBT.BaseDatabase<" + this.ClassName + "Base> db = LoadDatabase();\n";
+					_strFileData += "			if (db != null && db.Count > 0)\n";
+					_strFileData += "			{\n";
+					_strFileData += "				string strOut = \"\";\n";
+					_strFileData += "				string strExportFile = DATABASE_FILE_NAME.Replace(\".asset\", \"\") + \"Data.txt\";\n";
+					_strFileData += "				for (int i = 0; i < db.database.Count; i++)\n";
+					_strFileData += "				{\n";
+					_strFileData += "					strOut += db.database[i].Serialize() + \"\\n\";\n";
+					_strFileData += "				}\n";
+					_strFileData += "				if (Util.WriteTextFile(DATABASE_FILE_DIRECTORY, strExportFile, strOut))\n";
+					_strFileData += "					Debug.Log(\"Export Success! \" + DATABASE_FILE_DIRECTORY + \"/\" + strExportFile);\n";
+					_strFileData += "				else\n";
+					_strFileData += "					Debug.Log(\"Export Failure! \" + DATABASE_FILE_DIRECTORY + \"/\" + strExportFile);\n";
+					_strFileData += "			}\n";
+					_strFileData += "		}\n";
+					_strFileData += "		public	static	CBT.BaseDatabase<" + this.ClassName + "Base>			Import()\n";
+					_strFileData += "		{\n";
+					_strFileData += "			TextAsset ta = (TextAsset) Resources.Load(DATABASE_FILE_DIRECTORY.Replace(\"Resources/\", \"\") + \"/\" + DATABASE_FILE_NAME.Replace(\".asset\", \"\") + \"Data\", typeof(TextAsset));\n";
+					_strFileData += "			string strIn = \"\";\n";
+					_strFileData += "			if (ta != null)\n";
+					_strFileData += "				strIn = ta.text;\n";
+					_strFileData += "			CBT.BaseDatabase<" + this.ClassName + "Base> db = new CBT.BaseDatabase<" + this.ClassName + "Base>();\n";
+					_strFileData += "			string[] strSpl1 = strIn.Split('\\n');\n";
+					_strFileData += "			foreach (string st in strSpl1)\n";
+					_strFileData += "			{\n";
+					_strFileData += "				if (st.Trim() != \"\")\n";
+					_strFileData += "				{\n";
+					_strFileData += "					" + this.ClassName + "Base b = new " + this.ClassName + "Base();\n";
+					_strFileData += "					b.Deserialize(st);\n";
+					_strFileData += "					db.database.Add(b);\n";
+					_strFileData += "				}\n";
+					_strFileData += "			}\n";
+					_strFileData += "			db.IsDatabaseLoaded = true;\n";
+					_strFileData += "			return db;\n";
+					_strFileData += "		}\n";
+					_strFileData += "\n";
+					_strFileData += "	#endregion\n\n";
+				}
+
 				// BUILD PUBLIC SEARCH FUNCTIONS REGION			-----------------------------------------------
 				_strFileData += "	#region \"PUBLIC SEARCH FUNCTIONS\"\n\n";
-				if (IsANetworkObject)
+
+				if (UseUnityDatabase)
 				{
-					_strFileData		+= "		public	static	" + this.ClassName + "Base		FindByNetID(int intFind)\n		{\n";
-					_strFileData		+= "			if (" + this.ClassName + "Manager.Instance != null)\n";
-					_strFileData	+= "				return " + this.ClassName + "Manager.Instance." + this.ClassName + "s.Find(x => x.NetID == intFind);\n";
-					_strFileData		+= "			else\n				return null;\n";
-					_strFileData		+= "		}\n";
-				}
-				for (int i = 0; i < Variables.Count; i++)
-				{
-					if (!Variables[i].IsDeleted)
+						_strFileData		+= "		public	static	" + this.ClassName + "Base		FindByID(int intFind)\n";
+						_strFileData		+= "		{\n";
+						_strFileData		+= "			return LoadDatabase().GetByID(intFind);\n";
+						_strFileData		+= "		}\n";
+						_strFileData		+= "		public	static	" + this.ClassName + "Base		FindByIndex( int intFind)\n";
+						_strFileData		+= "		{\n";
+						_strFileData		+= "			return LoadDatabase().GetByIndex(intFind);\n";
+						_strFileData		+= "		}\n";
+				} else {
+					// USE AN OBJECT MANAGER TO FIND RECORDS
+					if (IsANetworkObject)
 					{
-						if (UseClassMgr && UseDatabase)
+						_strFileData		+= "		public	static	" + this.ClassName + "Base		FindByNetID(int intFind)\n		{\n";
+						_strFileData		+= "			if (" + this.ClassName + "Manager.Instance != null)\n";
+						_strFileData		+= "				return " + this.ClassName + "Manager.Instance." + this.ClassName + "s.Find(x => x.NetID == intFind);\n";
+						_strFileData		+= "			else\n				return null;\n";
+						_strFileData		+= "		}\n";
+					}
+					blnIndexedID = false;
+					for (int i = 0; i < Variables.Count; i++)
+					{
+						if (!Variables[i].IsDeleted)
 						{
-							if (Variables[i].IsIndex)
+							if (UseClassMgr && UseSQLDatabase)
 							{
-								_strFileData		+= "		public	static	" + this.ClassName + "Base		FindByID(" + GetPropertyType(Variables[i]) + " " + Variables[i].GetPrivatePrefix + "Find)\n		{\n";
-								_strFileData		+= "			if (" + this.ClassName + "Manager.Instance != null)\n";
-								if (Variables[i].VarType.ToLower() == "string")
-									_strFileData	+= "				return " + this.ClassName + "Manager.Instance." + this.ClassName + "s.Find(x => x." + Variables[i].Name + ".ToLower() == " + Variables[i].GetPrivatePrefix + "Find.ToLower());\n";
-								else
-									_strFileData	+= "				return " + this.ClassName + "Manager.Instance." + this.ClassName + "s.Find(x => x." + Variables[i].Name + " == " + Variables[i].GetPrivatePrefix + "Find);\n";
-								_strFileData		+= "			else\n				return null;\n";
-								_strFileData		+= "		}\n";
-							}
-							if (Variables[i].IsIndex || Variables[i].IsSearchable)
-							{
-								_strFileData		+= "		public	static	" + this.ClassName + "Base		FindBy" + Variables[i].Name + "(" + GetPropertyType(Variables[i]) + " " + Variables[i].GetPrivatePrefix + "Find)\n		{\n";
-								_strFileData		+= "			if (" + this.ClassName + "Manager.Instance != null)\n";
-								if (Variables[i].VarType.ToLower() == "string")
-									_strFileData	+= "				return " + this.ClassName + "Manager.Instance." + this.ClassName + "s.Find(x => x." + Variables[i].Name + ".ToLower() == " + Variables[i].GetPrivatePrefix + "Find.ToLower());\n";
-								else
-									_strFileData	+= "				return " + this.ClassName + "Manager.Instance." + this.ClassName + "s.Find(x => x." + Variables[i].Name + " == " + Variables[i].GetPrivatePrefix + "Find);\n";
-								_strFileData		+= "			else\n				return null;\n";
-								_strFileData		+= "		}\n";
-							}
-						} else {
-							if (Variables[i].IsIndex)
-							{
-								_strFileData		+= "		public	static	" + this.ClassName + "Base		FindByID(List<" + this.ClassName + "Base> lib, " + GetPropertyType(Variables[i]) + " " + Variables[i].GetPrivatePrefix + "Find)\n		{\n";
-								_strFileData		+= "			if (" + this.ClassName + "Manager.Instance != null)\n";
-								if (Variables[i].VarType.ToLower() == "string")
-									_strFileData	+= "				return lib.Find(x => x." + Variables[i].Name + ".ToLower() == " + Variables[i].GetPrivatePrefix + "Find.ToLower());\n";
-								else
-									_strFileData	+= "				return lib.Find(x => x." + Variables[i].Name + " == " + Variables[i].GetPrivatePrefix + "Find);\n";
-								_strFileData		+= "			else\n				return null;\n";
-								_strFileData		+= "		}\n";
-							}
-							if (Variables[i].IsIndex || Variables[i].IsSearchable)
-							{
-								_strFileData		+= "		public	static	" + this.ClassName + "Base		FindBy" + Variables[i].Name + "(List<" + this.ClassName + "Base> lib, " + GetPropertyType(Variables[i]) + " " + Variables[i].GetPrivatePrefix + "Find)\n		{\n";
-								_strFileData		+= "			if (" + this.ClassName + "Manager.Instance != null)\n";
-								if (Variables[i].VarType.ToLower() == "string")
-									_strFileData	+= "				return lib.Find(x => x." + Variables[i].Name + ".ToLower() == " + Variables[i].GetPrivatePrefix + "Find.ToLower());\n";
-								else
-									_strFileData	+= "				return lib.Find(x => x." + Variables[i].Name + " == " + Variables[i].GetPrivatePrefix + "Find);\n";
-								_strFileData		+= "			else\n				return null;\n";
-								_strFileData		+= "		}\n";
+								if (Variables[i].IsIndex && !blnIndexedID)
+								{
+									blnIndexedID = true;
+									_strFileData		+= "		public	static	" + this.ClassName + "Base		FindByID(" + GetPropertyType(Variables[i]) + " " + Variables[i].GetPrivatePrefix + "Find)\n		{\n";
+									_strFileData		+= "			if (" + this.ClassName + "Manager.Instance != null)\n";
+									if (Variables[i].VarType.ToLower() == "string")
+										_strFileData	+= "				return " + this.ClassName + "Manager.Instance." + this.ClassName + "s.Find(x => x." + Variables[i].Name + ".ToLower() == " + Variables[i].GetPrivatePrefix + "Find.ToLower());\n";
+									else
+										_strFileData	+= "				return " + this.ClassName + "Manager.Instance." + this.ClassName + "s.Find(x => x." + Variables[i].Name + " == " + Variables[i].GetPrivatePrefix + "Find);\n";
+									_strFileData		+= "			else\n				return null;\n";
+									_strFileData		+= "		}\n";
+								}
+								if (Variables[i].IsIndex || Variables[i].IsSearchable)
+								{
+									_strFileData		+= "		public	static	" + this.ClassName + "Base		FindBy" + Variables[i].Name + "(" + GetPropertyType(Variables[i]) + " " + Variables[i].GetPrivatePrefix + "Find)\n		{\n";
+									_strFileData		+= "			if (" + this.ClassName + "Manager.Instance != null)\n";
+									if (Variables[i].VarType.ToLower() == "string")
+										_strFileData	+= "				return " + this.ClassName + "Manager.Instance." + this.ClassName + "s.Find(x => x." + Variables[i].Name + ".ToLower() == " + Variables[i].GetPrivatePrefix + "Find.ToLower());\n";
+									else
+										_strFileData	+= "				return " + this.ClassName + "Manager.Instance." + this.ClassName + "s.Find(x => x." + Variables[i].Name + " == " + Variables[i].GetPrivatePrefix + "Find);\n";
+									_strFileData		+= "			else\n				return null;\n";
+									_strFileData		+= "		}\n";
+								}
+							} else {
+								if (Variables[i].IsIndex && !blnIndexedID)
+								{
+									blnIndexedID = true;
+									_strFileData		+= "		public	static	" + this.ClassName + "Base		FindByID(List<" + this.ClassName + "Base> lib, " + GetPropertyType(Variables[i]) + " " + Variables[i].GetPrivatePrefix + "Find)\n		{\n";
+									_strFileData		+= "			if (" + this.ClassName + "Manager.Instance != null)\n";
+									if (Variables[i].VarType.ToLower() == "string")
+										_strFileData	+= "				return lib.Find(x => x." + Variables[i].Name + ".ToLower() == " + Variables[i].GetPrivatePrefix + "Find.ToLower());\n";
+									else
+										_strFileData	+= "				return lib.Find(x => x." + Variables[i].Name + " == " + Variables[i].GetPrivatePrefix + "Find);\n";
+									_strFileData		+= "			else\n				return null;\n";
+									_strFileData		+= "		}\n";
+								}
+								if (Variables[i].IsIndex || Variables[i].IsSearchable)
+								{
+									_strFileData		+= "		public	static	" + this.ClassName + "Base		FindBy" + Variables[i].Name + "(List<" + this.ClassName + "Base> lib, " + GetPropertyType(Variables[i]) + " " + Variables[i].GetPrivatePrefix + "Find)\n		{\n";
+									_strFileData		+= "			if (" + this.ClassName + "Manager.Instance != null)\n";
+									if (Variables[i].VarType.ToLower() == "string")
+										_strFileData	+= "				return lib.Find(x => x." + Variables[i].Name + ".ToLower() == " + Variables[i].GetPrivatePrefix + "Find.ToLower());\n";
+									else
+										_strFileData	+= "				return lib.Find(x => x." + Variables[i].Name + " == " + Variables[i].GetPrivatePrefix + "Find);\n";
+									_strFileData		+= "			else\n				return null;\n";
+									_strFileData		+= "		}\n";
+								}
 							}
 						}
 					}
@@ -1190,16 +1905,55 @@ namespace CBT
 
 				// BUILD PRIVATE FUNCTIONS REGION		-----------------------------------------------
 				_strFileData += "	#region \"PRIVATE FUNCTIONS\"\n\n";
+				if (HasVariableType("sprite") || HasVariableType("image"))
+				{
+					_strFileData		+= "			private Sprite				GetSprite(ref Sprite sprIcon, ref string strIcon, string strInput = \"\")\n";
+					_strFileData		+= "			{\n";
+					_strFileData		+= "				if (strInput.Trim() != \"\")\n";
+					_strFileData		+= "						strIcon = strInput.Trim();\n";
+					_strFileData		+= "				strIcon = strIcon.Replace(\"Assets/Resources/\", \"\");\n";
+					_strFileData		+= "				int i = strIcon.LastIndexOf('.');\n";
+					_strFileData		+= "				if (i > 0)\n";
+					_strFileData		+= "					strIcon = strIcon.Substring(0, i);\n";
+					_strFileData		+= "				if (strIcon.Trim() != \"\")\n";
+					_strFileData		+= "					sprIcon = Resources.Load<Sprite>(strIcon);\n";
+					_strFileData		+= "				else if (sprIcon != null)\n";
+					_strFileData		+= "					SetSprite(ref sprIcon, ref strIcon);\n";
+					_strFileData		+= "				return sprIcon;\n";
+					_strFileData		+= "			}\n";
+					_strFileData		+= "			public	void					SetSprite(ref Sprite sprIcon, ref string strIcon)\n";
+					_strFileData		+= "			{\n";
+					_strFileData		+= "				#if UNITY_EDITOR\n";
+					_strFileData		+= "				if (sprIcon != null)\n";
+					_strFileData		+= "				{ \n";
+					_strFileData		+= "					strIcon = AssetDatabase.GetAssetPath(sprIcon).Replace(\"Assets/Resources/\", \"\");\n";
+					_strFileData		+= "					int i = strIcon.LastIndexOf('.');\n";
+					_strFileData		+= "					if (i > 0)\n";
+					_strFileData		+= "						strIcon = strIcon.Substring(0, i);\n";
+					_strFileData		+= "				}\n";
+					_strFileData		+= "				#endif\n";
+					_strFileData		+= "			}\n\n";
+				}
 				_strFileData += "\n	#endregion\n\n";
 
 				// BUILD PUBLIC FUNCTIONS REGION		-----------------------------------------------
 				_strFileData += "	#region \"PUBLIC FUNCTIONS\"\n\n";
+				_strFileData += "		public	" + ClassName + "Base()\n		{\n";
+				_strFileData += "		}\n";
+				_strFileData += "		public	" + ClassName + "Base(" + ClassName + "Base input)\n		{\n";
+				_strFileData += "			this.Clone(input);\n";
+				_strFileData += "		}\n";
 				_strFileData += "		public	void			Clone(" + ClassName + "Base c)\n		{\n";
 				for (int i = 0; i < Variables.Count; i++)
 				{
 					if (!Variables[i].IsDeleted)
 					{
-						_strFileData += "			" + Variables[i].GetPrivatePrefix + Variables[i].Name + "	= c." + Variables[i].Name + ";\n";
+						if (Variables[i].VarType.ToLower() == "sprite" || Variables[i].VarType.ToLower() == "image")
+						{
+							_strFileData += "							_sprImg" + Variables[i].Name + "	= c." + Variables[i].Name + "Sprite;\n";
+							_strFileData += "							_strImg" + Variables[i].Name + "	= c." + Variables[i].Name + "String;\n";
+						} else
+							_strFileData += "			" + Variables[i].GetPrivatePrefix + Variables[i].Name + "	= c." + Variables[i].Name + ";\n";
 					}
 				}
 				_strFileData += "		}\n";
@@ -1209,37 +1963,43 @@ namespace CBT
 				{
 					if (!Variables[i].IsDeleted)
 					{ 
-						_strFileData += "			" + Variables[i].GetPrivatePrefix + Variables[i].Name;
-						if (Variables[i].VarType.ToLower() == "vector2")
-							_strFileData += "	= Vector2.zero";
-						else if (Variables[i].VarType.ToLower() == "vector3")
-							_strFileData += "	= Vector3.zero";
-						else if (Variables[i].VarType.ToLower() == "quaternion")
-							_strFileData += "	= Quaternion.identity";
-						else if ((Variables[i].VarType.ToLower() == "date" ||
-											Variables[i].VarType.ToLower() == "datetime"))
+						if (Variables[i].VarType.ToLower() == "sprite" || Variables[i].VarType.ToLower() == "image")
 						{
-							if (Variables[i].StartingValue == "")
-								_strFileData += " = System.DateTime.Parse(\"01/01/1900\")";
+							_strFileData += "			_sprImg" + Variables[i].Name + "	= null;\n";
+							_strFileData += "			_strImg" + Variables[i].Name + "	= \"\";\n";
+						} else {
+							_strFileData += "			" + Variables[i].GetPrivatePrefix + Variables[i].Name;
+							if (Variables[i].VarType.ToLower() == "vector2")
+								_strFileData += "	= Vector2.zero";
+							else if (Variables[i].VarType.ToLower() == "vector3")
+								_strFileData += "	= Vector3.zero";
+							else if (Variables[i].VarType.ToLower() == "quaternion")
+								_strFileData += "	= Quaternion.identity";
+							else if ((Variables[i].VarType.ToLower() == "date" ||
+												Variables[i].VarType.ToLower() == "datetime"))
+							{
+								if (Variables[i].StartingValue == "")
+									_strFileData += " = System.DateTime.Now";
+								else
+									_strFileData += " = System.DateTime.Parse(\"" + Variables[i].StartingValue + "\")";
+							}
+							else if (Variables[i].VarType.ToLower() == "string")
+								_strFileData += "	=	\"" + Variables[i].StartingValue + "\"";
+							else if (Variables[i].VarType.ToLower() == "float")
+								_strFileData += "	=	" + Variables[i].StartingValue + "f";
+							else if (Variables[i].VarType.ToLower().StartsWith("enum"))
+								_strFileData += " = (" + Variables[i].VarType.Substring(4) + ") " + Util.ConvertToInt(Variables[i].StartingValue).ToString();
 							else
-								_strFileData += " = System.DateTime.Parse(\"" + Variables[i].StartingValue + "\")";
+								_strFileData += "	=	" + Variables[i].StartingValue;
+							_strFileData += ";\n";
 						}
-						else if (Variables[i].VarType.ToLower() == "string")
-							_strFileData += "	=	\"" + Variables[i].StartingValue + "\"";
-						else if (Variables[i].VarType.ToLower() == "float")
-							_strFileData += "	=	" + Variables[i].StartingValue + "f";
-						else if (Variables[i].VarType.ToLower().StartsWith("enum"))
-							_strFileData += " = (" + Variables[i].VarType.Substring(4) + ") " + Util.ConvertToInt(Variables[i].StartingValue).ToString();
-						else
-							_strFileData += "	=	" + Variables[i].StartingValue;
-						_strFileData += ";\n";
 					}
 				}
 				_strFileData += "		}\n";
 				_strFileData += "\n	#endregion\n\n";
 
 				// BUILD DATABASE REGION		-------------------------------------------------------
-				if (UseDatabase)
+				if (UseSQLDatabase)
 				{ 
 					_strFileData += "	#region \"DATABASE FUNCTIONS\"\n\n";
 
@@ -1388,7 +2148,9 @@ namespace CBT
 					for (int i = 0; i < Variables.Count; i++)
 					{
 						if (!Variables[i].IsDeleted)
-							if (Variables[i].VarType.ToLower() == "date" || Variables[i].VarType.ToLower() == "datetime")
+							if (Variables[i].VarType.ToLower() == "sprite" || Variables[i].VarType.ToLower() == "image")
+								_strFileData += "			strOut += " + Variables[i].Name + "String.ToString() + \"|\";\n";
+							else if (Variables[i].VarType.ToLower() == "date" || Variables[i].VarType.ToLower() == "datetime")
 								_strFileData += "			strOut += " + Variables[i].Name + ".ToString(\"MM/dd/yyyy HH:mm:ss\") + \"|\";\n";
 							else if (Variables[i].VarType.ToLower().StartsWith("enum"))
 								_strFileData += "			strOut += " + Variables[i].Name + "Int.ToString() + \"|\";\n";
@@ -1411,6 +2173,11 @@ namespace CBT
 							else
 								switch (Variables[i].VarType.ToLower())
 								{
+									case "sprite":
+									case "image":
+										_strFileData += "			_strImg" + Variables[i].Name + " = strSpl[" + x.ToString() + "];\n";
+										_strFileData += "			_sprImg" + Variables[i].Name + " = null;\n";
+										break;
 									case "string": 
 										_strFileData += "			" + Variables[i].GetPrivatePrefix + Variables[i].Name + " = strSpl[" + x.ToString() + "];\n";
 										break;
@@ -1435,6 +2202,9 @@ namespace CBT
 										break;
 									case "quaternion":
 										_strFileData += "			" + Variables[i].GetPrivatePrefix + Variables[i].Name + " = Util.ConvertToQuaternion(strSpl[" + x.ToString() + "]);\n";
+										break;
+									case "color":
+										_strFileData += "			" + Variables[i].GetPrivatePrefix + Variables[i].Name + " = Util.ConvertToColor(strSpl[" + x.ToString() + "]);\n";
 										break;
 								}
 							x++;
@@ -1481,7 +2251,7 @@ namespace CBT
 					_strFileData	+= "using UnityEngine.Networking;\n";
 				_strFileData		+= "using System.Collections;\n";
 				_strFileData		+= "using System.Collections.Generic;\n";
-				if (UseDatabase)
+				if (UseSQLDatabase)
 					_strFileData	+= "using System.Data;\n";
 				_strFileData		+= "\n";
 
@@ -1491,10 +2261,20 @@ namespace CBT
 
 				// BUILD PRIVATE VARIABLE REGION		-----------------------------------------------
 				_strFileData += "	#region \"PRIVATE VARIABLES\"\n\n";
+				_strFileData += "		private static	List<" + this.ClassName + ">	_" + this.ClassName.ToLower() + "DB	= null;\n";
 				_strFileData += "\n	#endregion\n\n";
 
 				// BUILD PRIVATE PROPERTY REGION		-----------------------------------------------
 				_strFileData += "	#region \"PRIVATE PROPERTIES\"\n\n";
+				_strFileData += "		private static	List<" + this.ClassName + ">	" + this.ClassName + "DB\n";
+				_strFileData += "		{\n";
+				_strFileData += "			get\n";
+				_strFileData += "			{\n";
+				_strFileData += "				if (_" + this.ClassName.ToLower() + "DB == null || _" + this.ClassName.ToLower() + "DB.Count < 1)\n";
+				_strFileData += "						_" + this.ClassName.ToLower() + "DB = " + this.ClassName + ".LoadEntireDatabase();\n";
+				_strFileData += "				return _" + this.ClassName.ToLower() + "DB;\n";
+				_strFileData += "			}\n";
+				_strFileData += "		}\n";
 				_strFileData += "\n	#endregion\n\n";
 
 				// BUILD PUBLIC PROPERTY REGION			-----------------------------------------------
@@ -1503,68 +2283,98 @@ namespace CBT
 
 				// BUILD PUBLIC SEARCH FUNCTIONS REGION			---------------------------------------
 				_strFileData += "	#region \"PUBLIC SEARCH FUNCTIONS\"\n\n";
-				if (IsANetworkObject)
+				if (UseUnityDatabase)
 				{
-					_strFileData		+= "		public	static	" + this.ClassName + "		FindByNetID(int intFind)\n		{\n";
-					_strFileData		+= "			if (" + this.ClassName + "Manager.Instance != null)\n";
-					_strFileData	+= "				return " + this.ClassName + "Manager.Instance." + this.ClassName + "s.Find(x => x.NetID == intFind);\n";
-					_strFileData		+= "			else\n				return null;\n";
-					_strFileData		+= "		}\n";
-				}
-				for (int i = 0; i < Variables.Count; i++)
-				{
-					if (!Variables[i].IsDeleted)
+					_strFileData += "		public	new	static	" + this.ClassName + "		FindByID(int intFind)\n";
+					_strFileData += "		{\n";
+					_strFileData += "			" + this.ClassName + " c = " + this.ClassName + "DB.Find(x => x.ID == intFind);\n";
+					_strFileData += "			return c;\n";
+					_strFileData += "		}\n";
+
+					_strFileData += "		public	new	static	" + this.ClassName + "		FindByIndex(int intFind)\n";
+					_strFileData += "		{\n";
+					_strFileData += "			" + this.ClassName + " c = " + this.ClassName + "DB.Find(x => x.Index == intFind);\n";
+					_strFileData += "			return c;\n";
+					_strFileData += "		}\n";
+
+					_strFileData += "		public	static	List<" + this.ClassName + ">	LoadEntireDatabase()\n";
+					_strFileData += "		{\n";
+					_strFileData += "			List<" + this.ClassName + "> l	= new List<" + this.ClassName + ">();\n";
+					_strFileData += "			CBT.BaseDatabase<" + this.ClassName + "Base> d = " + this.ClassName + "Base.LoadDatabase();\n\n";
+					_strFileData += "			for (int i = 0; i < d.Count; i++)\n";
+					_strFileData += "				l.Add(new " + this.ClassName + "(d.database[i]));\n\n";
+					_strFileData += "			return l;\n";
+					_strFileData += "		}\n";
+
+				} else {
+					// USE AN OBJECT MANAGER TO FIND RECORDS
+
+					if (IsANetworkObject)
 					{
-						if (UseClassMgr && UseDatabase)
+						_strFileData		+= "		public	new	static	" + this.ClassName + "		FindByNetID(int intFind)\n		{\n";
+						_strFileData		+= "			if (" + this.ClassName + "Manager.Instance != null)\n";
+						_strFileData	+= "				return " + this.ClassName + "Manager.Instance." + this.ClassName + "s.Find(x => x.NetID == intFind);\n";
+						_strFileData		+= "			else\n				return null;\n";
+						_strFileData		+= "		}\n";
+					}
+					bool blnIndexedID = false;
+					for (int i = 0; i < Variables.Count; i++)
+					{
+						if (!Variables[i].IsDeleted)
 						{
-							if (Variables[i].IsIndex)
+							if (UseClassMgr && UseSQLDatabase)
 							{
-								_strFileData		+= "		public	static	" + this.ClassName + "		FindByID(" + GetPropertyType(Variables[i]) + " " + Variables[i].GetPrivatePrefix + "Find)\n		{\n";
-								_strFileData		+= "			if (" + this.ClassName + "Manager.Instance != null)\n";
-								if (Variables[i].VarType.ToLower() == "string")
-									_strFileData	+= "				return " + this.ClassName + "Manager.Instance." + this.ClassName + "s.Find(x => x." + Variables[i].Name + ".ToLower() == " + Variables[i].GetPrivatePrefix + "Find.ToLower());\n";
-								else
-									_strFileData	+= "				return " + this.ClassName + "Manager.Instance." + this.ClassName + "s.Find(x => x." + Variables[i].Name + " == " + Variables[i].GetPrivatePrefix + "Find);\n";
-								_strFileData		+= "			else\n				return null;\n";
-								_strFileData		+= "		}\n";
-							}
-							if (Variables[i].IsIndex || Variables[i].IsSearchable)
-							{
-								_strFileData		+= "		public	static	" + this.ClassName + "		FindBy" + Variables[i].Name + "(" + GetPropertyType(Variables[i]) + " " + Variables[i].GetPrivatePrefix + "Find)\n		{\n";
-								_strFileData		+= "			if (" + this.ClassName + "Manager.Instance != null)\n";
-								if (Variables[i].VarType.ToLower() == "string")
-									_strFileData	+= "				return " + this.ClassName + "Manager.Instance." + this.ClassName + "s.Find(x => x." + Variables[i].Name + ".ToLower() == " + Variables[i].GetPrivatePrefix + "Find.ToLower());\n";
-								else
-									_strFileData	+= "				return " + this.ClassName + "Manager.Instance." + this.ClassName + "s.Find(x => x." + Variables[i].Name + " == " + Variables[i].GetPrivatePrefix + "Find);\n";
-								_strFileData		+= "			else\n				return null;\n";
-								_strFileData		+= "		}\n";
-							}
-						} else {
-							if (Variables[i].IsIndex)
-							{
-								_strFileData		+= "		public	static	" + this.ClassName + "		FindByID(List<" + this.ClassName + "> lib, " + GetPropertyType(Variables[i]) + " " + Variables[i].GetPrivatePrefix + "Find)\n		{\n";
-								_strFileData		+= "			if (" + this.ClassName + "Manager.Instance != null)\n";
-								if (Variables[i].VarType.ToLower() == "string")
-									_strFileData	+= "				return lib.Find(x => x." + Variables[i].Name + ".ToLower() == " + Variables[i].GetPrivatePrefix + "Find.ToLower());\n";
-								else
-									_strFileData	+= "				return lib.Find(x => x." + Variables[i].Name + " == " + Variables[i].GetPrivatePrefix + "Find);\n";
-								_strFileData		+= "			else\n				return null;\n";
-								_strFileData		+= "		}\n";
-							}
-							if (Variables[i].IsIndex || Variables[i].IsSearchable)
-							{
-								_strFileData		+= "		public	static	" + this.ClassName + "		FindBy" + Variables[i].Name + "(List<" + this.ClassName + "> lib, " + GetPropertyType(Variables[i]) + " " + Variables[i].GetPrivatePrefix + "Find)\n		{\n";
-								_strFileData		+= "			if (" + this.ClassName + "Manager.Instance != null)\n";
-								if (Variables[i].VarType.ToLower() == "string")
-									_strFileData	+= "				return lib.Find(x => x." + Variables[i].Name + ".ToLower() == " + Variables[i].GetPrivatePrefix + "Find.ToLower());\n";
-								else
-									_strFileData	+= "				return lib.Find(x => x." + Variables[i].Name + " == " + Variables[i].GetPrivatePrefix + "Find);\n";
-								_strFileData		+= "			else\n				return null;\n";
-								_strFileData		+= "		}\n";
+								if (Variables[i].IsIndex && !blnIndexedID)
+								{
+									blnIndexedID = true;
+									_strFileData		+= "		public	new	static	" + this.ClassName + "		FindByID(" + GetPropertyType(Variables[i]) + " " + Variables[i].GetPrivatePrefix + "Find)\n		{\n";
+									_strFileData		+= "			if (" + this.ClassName + "Manager.Instance != null)\n";
+									if (Variables[i].VarType.ToLower() == "string")
+										_strFileData	+= "				return " + this.ClassName + "Manager.Instance." + this.ClassName + "s.Find(x => x." + Variables[i].Name + ".ToLower() == " + Variables[i].GetPrivatePrefix + "Find.ToLower());\n";
+									else
+										_strFileData	+= "				return " + this.ClassName + "Manager.Instance." + this.ClassName + "s.Find(x => x." + Variables[i].Name + " == " + Variables[i].GetPrivatePrefix + "Find);\n";
+									_strFileData		+= "			else\n				return null;\n";
+									_strFileData		+= "		}\n";
+								}
+								if (Variables[i].IsIndex || Variables[i].IsSearchable)
+								{
+									_strFileData		+= "		public	new	static	" + this.ClassName + "		FindBy" + Variables[i].Name + "(" + GetPropertyType(Variables[i]) + " " + Variables[i].GetPrivatePrefix + "Find)\n		{\n";
+									_strFileData		+= "			if (" + this.ClassName + "Manager.Instance != null)\n";
+									if (Variables[i].VarType.ToLower() == "string")
+										_strFileData	+= "				return " + this.ClassName + "Manager.Instance." + this.ClassName + "s.Find(x => x." + Variables[i].Name + ".ToLower() == " + Variables[i].GetPrivatePrefix + "Find.ToLower());\n";
+									else
+										_strFileData	+= "				return " + this.ClassName + "Manager.Instance." + this.ClassName + "s.Find(x => x." + Variables[i].Name + " == " + Variables[i].GetPrivatePrefix + "Find);\n";
+									_strFileData		+= "			else\n				return null;\n";
+									_strFileData		+= "		}\n";
+								}
+							} else {
+								if (Variables[i].IsIndex && !blnIndexedID)
+								{
+									blnIndexedID = true;
+									_strFileData		+= "		public	new	static	" + this.ClassName + "		FindByID(List<" + this.ClassName + "> lib, " + GetPropertyType(Variables[i]) + " " + Variables[i].GetPrivatePrefix + "Find)\n		{\n";
+									_strFileData		+= "			if (" + this.ClassName + "Manager.Instance != null)\n";
+									if (Variables[i].VarType.ToLower() == "string")
+										_strFileData	+= "				return lib.Find(x => x." + Variables[i].Name + ".ToLower() == " + Variables[i].GetPrivatePrefix + "Find.ToLower());\n";
+									else
+										_strFileData	+= "				return lib.Find(x => x." + Variables[i].Name + " == " + Variables[i].GetPrivatePrefix + "Find);\n";
+									_strFileData		+= "			else\n				return null;\n";
+									_strFileData		+= "		}\n";
+								}
+								if (Variables[i].IsIndex || Variables[i].IsSearchable)
+								{
+									_strFileData		+= "		public	new	static	" + this.ClassName + "		FindBy" + Variables[i].Name + "(List<" + this.ClassName + "> lib, " + GetPropertyType(Variables[i]) + " " + Variables[i].GetPrivatePrefix + "Find)\n		{\n";
+									_strFileData		+= "			if (" + this.ClassName + "Manager.Instance != null)\n";
+									if (Variables[i].VarType.ToLower() == "string")
+										_strFileData	+= "				return lib.Find(x => x." + Variables[i].Name + ".ToLower() == " + Variables[i].GetPrivatePrefix + "Find.ToLower());\n";
+									else
+										_strFileData	+= "				return lib.Find(x => x." + Variables[i].Name + " == " + Variables[i].GetPrivatePrefix + "Find);\n";
+									_strFileData		+= "			else\n				return null;\n";
+									_strFileData		+= "		}\n";
+								}
 							}
 						}
-					}
-				}				
+					}			
+				}	
 				_strFileData += "\n	#endregion\n\n";
 
 				// BUILD PRIVATE FUNCTIONS REGION		-----------------------------------------------
@@ -1573,10 +2383,21 @@ namespace CBT
 
 				// BUILD PUBLIC FUNCTIONS REGION		-----------------------------------------------
 				_strFileData += "	#region \"PUBLIC FUNCTIONS\"\n\n";
+				_strFileData += "		public	" + this.ClassName + "()\n";
+				_strFileData += "		{\n";
+				_strFileData += "		}\n";
+				_strFileData += "		public	" + this.ClassName + "(" + this.ClassName + "Base c)\n";
+				_strFileData += "		{\n";
+				_strFileData += "			this.Clone(c);\n";
+				_strFileData += "		}\n";
+				_strFileData += "		public	" + this.ClassName + "(" + this.ClassName + " c)\n";
+				_strFileData += "		{\n";
+				_strFileData += "			this.Clone(c);\n";
+				_strFileData += "		}\n";
 				_strFileData += "\n	#endregion\n\n";
 
 				// BUILD DATABASE REGION		-------------------------------------------------------
-				if (UseDatabase)
+				if (UseSQLDatabase)
 				{ 
 					_strFileData += "	#region \"DATABASE FUNCTIONS\"\n\n";
 					_strFileData += "		public	override	void	PopulateClass(DataRow dr)\n		{\n";
@@ -1633,7 +2454,7 @@ namespace CBT
 			}
 			private void				CreateCSclassManager()
 			{
-				if (!UseClassMgr || !UseDatabase)
+				if ((!UseClassMgr && !UseSQLDatabase) || UseUnityDatabase)
 					return;
 
 				string strClassName	= this.ClassName + "Manager";
@@ -1654,7 +2475,7 @@ namespace CBT
 					_strFileData	+= "using UnityEngine.UI;\n";
 				_strFileData		+= "using System.Collections;\n";
 				_strFileData		+= "using System.Collections.Generic;\n";
-				if (UseDatabase)
+				if (UseSQLDatabase)
 					_strFileData	+= "using System.Data;\n";
 				_strFileData		+= "\n";
 
@@ -1702,7 +2523,7 @@ namespace CBT
 					_strFileData += "				if (_dbm == null)		_dbm = DatabaseManager.Instance;\n";
 					_strFileData += "					return _dbm;\n			}\n";
 					_strFileData += "		}\n";
-				} else if (UseDatabase) {
+				} else if (UseSQLDatabase) {
 					_strFileData += "		private	ClsDAL				_DAL				= null;\n";
 					_strFileData += "		private string				_DBserver		= \"" + DBserver.Replace("\\", "\\\\") + "\";\n";
 					_strFileData += "		private string				_DBdatabase	= \"" + DBdatabase + "\";\n";
@@ -1754,7 +2575,7 @@ namespace CBT
 				_strFileData += "	#region \"PRIVATE FUNCTIONS\"\n\n";
 				_strFileData += "		private	void				Start()\n		{\n";
 				_strFileData += "			_" + this.ClassName.ToLower() + "s = new List<" + this.ClassName + ">();\n";
-				if (UseDatabase)
+				if (UseSQLDatabase)
 				{
 				_strFileData += "			StartCoroutine(DoStart());\n";
 				_strFileData += "		}\n";
@@ -1808,13 +2629,15 @@ namespace CBT
 				_strFileData += "\n	#endregion\n\n";
 
 				// BUILD PUBLIC SEARCH FUNCTIONS REGION			---------------------------------------
+				bool blnIndexedID = false;
 				_strFileData += "	#region \"PUBLIC SEARCH FUNCTIONS\"\n\n";
 				for (int i = 0; i < Variables.Count; i++)
 				{
 					if (!Variables[i].IsDeleted)
 					{
-						if (Variables[i].IsIndex)
+						if (Variables[i].IsIndex && !blnIndexedID)
 						{
+							blnIndexedID = true;
 							_strFileData		+= "		public	" + this.ClassName + "		FindByID(" + GetPropertyType(Variables[i], true) + " " + Variables[i].GetPrivatePrefix + "Find)\n		{\n";
 							if (Variables[i].VarType.ToLower() == "string")
 								_strFileData	+= "			return _" + this.ClassName.ToLower() + "s.Find(x => x." + Variables[i].Name + ".ToLower() == " + Variables[i].GetPrivatePrefix + "Find.ToLower());\n";
@@ -1836,7 +2659,7 @@ namespace CBT
 				_strFileData += "\n	#endregion\n\n";
 
 				// BUILD DATABASE REGION		-------------------------------------------------------
-				if (UseDatabase)
+				if (UseSQLDatabase)
 				{ 
 					_strFileData += "	#region \"DATABASE FUNCTIONS\"\n\n";
 
@@ -1904,7 +2727,7 @@ namespace CBT
 			}
 			private void				CreateSQLfiles()
 			{
-				if (!UseDatabase)
+				if (!UseSQLDatabase)
 					return;
 
 				string strFileName = this.ClassName + "_Class_Setup.SQL";
@@ -1934,9 +2757,18 @@ namespace CBT
 				// WRITE THE FILE
 				Util.WriteTextFile(CLASS_SCRIPT_DIRECTORY, strFileName, _strFileData);
 			}
+			private void				CreateUnityDatabaseFiles()
+			{
+				if (!UseUnityDatabase)
+					return;
+
+				CreateBaseDatabaseFile();
+				CreateDatabaseEditorFile();
+				CreateDatabaseListViewFile();
+			}
 			private void				CreateEditorFile(bool blnCreateBase)
 			{
-				if (!UseUnity || !UseEditor)
+				if (!UseUnity || !UseEditor || UseUnityDatabase)
 					return;
 
 				string strClassName	= this.ClassName;
@@ -1945,7 +2777,14 @@ namespace CBT
 				string strFileName	= strClassName + "Editor.cs";
 
 				_strFileData = "";
+				// DETERMINE NUMBER OF QUATERNIONS
 				int intCnt = 0;
+				int intTotal = 0;
+				for (int i = 0; i < Variables.Count; i++)
+				{
+					if (!Variables[i].IsDeleted && Variables[i].VarType.ToLower() == "quaternion")
+						intTotal++;
+				}
 
 				// COMMENTED HEADER
 				_strFileData += "//		AUTO-GENERATED FILE: " + strFileName + "\n";
@@ -1963,12 +2802,15 @@ namespace CBT
 
 				_strFileData += "using UnityEngine;\n";
 				_strFileData += "using UnityEditor;\n";
-				_strFileData += "using UnityEditor.SceneManagement;\n\n";
+				_strFileData += "using System.Collections;\n\n";
 				_strFileData += "[CustomEditor(typeof(" + strClassName + "))]\n";
 				_strFileData += "public class " + strClassName + "Editor : Editor\n";
 				_strFileData += "{\n\n";
-				_strFileData += "	private Vector4[] v4		 = new Vector4[" + Variables.Count.ToString() + "];\n";
-				_strFileData += "	private Vector4[] v4Temp = new Vector4[" + Variables.Count.ToString() + "];\n\n";
+				if (intTotal > 0)
+				{
+					_strFileData += "	private Vector4[] v4		 = new Vector4[" + intTotal.ToString() + "];\n";
+					_strFileData += "	private Vector4[] v4Temp = new Vector4[" + intTotal.ToString() + "];\n\n";
+				}
 				_strFileData += "	public override void OnInspectorGUI()\n";
 				_strFileData += "	{\n";
 				_strFileData += "		" + strClassName + "	myTarget = null;\n";
@@ -2044,6 +2886,12 @@ namespace CBT
 								_strFileData += "			}\n\n";
 								intCnt++;
 								break;
+							case "color":
+								if (Variables[i].IsIndex)
+									_strFileData += "			EditorGUILayout.ColorField(\"" + Variables[i].Name + "\", myTarget." + Variables[i].Name + ");\n";
+								else
+									_strFileData += "			myTarget." + Variables[i].Name + "	= EditorGUILayout.ColorField(\"" + Variables[i].Name + "\", myTarget." + Variables[i].Name + ");\n";
+								break;
 							case "date":
 							case "datetime":
 								_strFileData += "			EditorGUILayout.TextField(\"" + Variables[i].Name + "\", myTarget." + Variables[i].Name + ".ToString(\"MM/dd/yyyy HH:mm:ss\"));\n";
@@ -2051,11 +2899,8 @@ namespace CBT
 						}
 					}
 				}
-				_strFileData += "\n			if (GUI.changed)\n				{\n";
+				_strFileData += "\n			if (GUI.changed)\n";
 				_strFileData += "				EditorUtility.SetDirty(myTarget);\n";
-				_strFileData += "				if (!Application.isPlaying)\n";
-				_strFileData += "					EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());\n";
-				_strFileData += "			}\n";
 				_strFileData += "		}\n";
 				_strFileData += "	}\n";
 				_strFileData += "}\n\n";
@@ -2066,7 +2911,7 @@ namespace CBT
 			}
 			private void				CreateManagerEditorFile()
 			{
-				if (!UseUnity || !UseEditor || !UseDatabase)
+				if (!UseUnity || !UseEditor || !UseSQLDatabase || UseUnityDatabase)
 					return;
 
 				string strClassName	= this.ClassName + "Manager";
@@ -2074,6 +2919,12 @@ namespace CBT
 
 				_strFileData = "";
 				int intCnt = 0;
+				int intTotal = 0;
+				for (int i = 0; i < Variables.Count; i++)
+				{
+					if (!Variables[i].IsDeleted && Variables[i].VarType.ToLower() == "quaternion")
+						intTotal++;
+				}
 
 				// COMMENTED HEADER
 				_strFileData += "//		AUTO-GENERATED FILE: " + strFileName + "\n";
@@ -2086,15 +2937,17 @@ namespace CBT
 				_strFileData += "using UnityEditor;\n";
 				if (IsANetworkObject)
 				_strFileData += "using UnityEngine.Networking;\n";
-				_strFileData += "using UnityEditor.SceneManagement;\n";
 				_strFileData += "using System.Collections;\n\n";
 				_strFileData += "[CustomEditor(typeof(" + strClassName + "))]\n";
 				_strFileData += "public class " + strClassName + "Editor : Editor\n";
 				_strFileData += "{\n\n";
 				_strFileData += "	private int		intSelected = 0;\n";
 				_strFileData += "	private bool	blnSave			= false;\n";
-				_strFileData += "	private Vector4[] v4			= new Vector4[" + Variables.Count.ToString() + "];\n";
-				_strFileData += "	private Vector4[] v4Temp	= new Vector4[" + Variables.Count.ToString() + "];\n\n";
+				if (intTotal > 0)
+				{
+					_strFileData += "	private Vector4[] v4			= new Vector4[" + intTotal.ToString() + "];\n";
+					_strFileData += "	private Vector4[] v4Temp	= new Vector4[" + intTotal.ToString() + "];\n\n";
+				}
 				_strFileData += "	public override void OnInspectorGUI()\n";
 				_strFileData += "	{\n";
 				_strFileData += "		" + strClassName + "	myTarget = null;\n";
@@ -2177,6 +3030,12 @@ namespace CBT
 									_strFileData += "				}\n\n";
 									intCnt++;
 									break;
+								case "color":
+									if (Variables[i].IsIndex)
+										_strFileData += "				EditorGUILayout.ColorField(\"" + Variables[i].Name + "\", selected." + Variables[i].Name + ");\n";
+									else
+										_strFileData += "				selected." + Variables[i].Name + "	= EditorGUILayout.ColorField(\"" + Variables[i].Name + "\", selected." + Variables[i].Name + ");\n";
+									break;
 								case "date":
 								case "datetime":
 									_strFileData += "				EditorGUILayout.TextField(\"" + Variables[i].Name + "\", selected." + Variables[i].Name + ".ToString(\"MM/dd/yyyy HH:mm:ss\"));\n";
@@ -2212,8 +3071,6 @@ namespace CBT
 				_strFileData += "				EditorGUILayout.EndHorizontal();\n\n";
 				_strFileData += "				if (GUI.changed)\n				{\n";
 				_strFileData += "					EditorUtility.SetDirty(myTarget);\n";
-				_strFileData += "					if (!Application.isPlaying)\n";
-				_strFileData += "						EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());\n";
 				_strFileData += "					blnSave = true;\n";
 				_strFileData += "				}\n";
 				_strFileData += "				if (blnSave && GUILayout.Button(\"SAVE\"))\n				{\n";
@@ -2257,7 +3114,8 @@ namespace CBT
 				_blnIsNetworkObject			= eff.IsANetworkObject;
 				_blnHasNetworkTransform	= eff.HasNetworkTransform;
 				_blnUseEditor						= eff.UseEditor;
-				_blnUseDatabase					= eff.UseDatabase;
+				_blnUseSQLDatabase			= eff.UseSQLDatabase;
+				_blnUseUnityDatabase		= eff.UseUnityDatabase;
 				_blnUseAppMgr						= eff.UseAppMgr;
 				_blnUseDBmgr						= eff.UseDBmgr;
 				_blnUseNetMgr						= eff.UseNetMgr;
@@ -2298,7 +3156,8 @@ namespace CBT
 				_blnIsNetworkObject			= false;
 				_blnHasNetworkTransform	= false;
 				_blnUseEditor						= true;
-				_blnUseDatabase					= true;
+				_blnUseSQLDatabase			= true;
+				_blnUseUnityDatabase		= false;
 				_blnUseClassMgr					= true;
 				_blnUseAppMgr						= false;
 				_blnUseNetMgr						= false;
@@ -2317,10 +3176,19 @@ namespace CBT
 				ClassProperty prop = null;
 			
 				// CREATE MANDATORY FIELDS
-				// CREATE INDEX VARIABLE
+				// CREATE ID VARIABLE
 				prop								= new ClassProperty();
 				prop.IsIndex				= true;
 				prop.Name						= ClassName + "ID";
+				prop.VarType				= "int";
+				prop.StartingValue	= "0";
+				prop.IsMandatory		= true;
+				prop.IsSearchable		= true;
+				_vars.Add(prop);
+
+				// CREATE INDEX VARIABLE
+				prop								= new ClassProperty();
+				prop.Name						= "Index";
 				prop.VarType				= "int";
 				prop.StartingValue	= "0";
 				prop.IsMandatory		= true;
@@ -2363,8 +3231,11 @@ namespace CBT
 				// BUILD THE CS CLASS MANAGER FILE
 				CreateCSclassManager();
 
-				// BUILD THE SQL QUERIES
+				// BUILD THE SQL QUERIES (IF APPLICABLE)
 				CreateSQLfiles();
+
+				// BUILD THE UNITY DATABASE FILES (IF APPLICABLE)
+				CreateUnityDatabaseFiles();
 
 				// BUILD THE CUSTOM EDITORS
 				CreateEditorFile(true);			// EDITOR FOR BASE CLASS

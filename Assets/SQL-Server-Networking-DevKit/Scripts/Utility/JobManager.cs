@@ -1,4 +1,11 @@
-﻿using UnityEngine;
+﻿// ===========================================================================================================
+//
+//	Prime_31's JobManager for Unity3D.
+//	https://github.com/prime31/P31UnityAddOns/blob/master/Scripts/Misc/JobManager.cs
+//
+// ===========================================================================================================
+
+using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 

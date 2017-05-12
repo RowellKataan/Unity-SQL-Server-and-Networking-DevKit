@@ -5,12 +5,13 @@
 //       Created: Mar 26, 2016
 //	
 // VERS 1.0.000 : Mar 26, 2016 : Original File Created. Released for Unity 3D.
+//			1.0.001 : May 04, 2017 :	Added separate variables to track ListView scroll position and
+//																editor scroll position (_v2ScrollLPosition and _v2ScrollEPosition).
 //
 // ===========================================================================================================
 
 using UnityEngine;
 using UnityEditor;
-using System.Collections;
 
 namespace CBT
 { 
@@ -25,7 +26,7 @@ namespace CBT
 
 		#region "PRIVATE VARIABLES"
 
-			private		Vector2		_v2ScrollPosition;
+			protected	Vector2		_v2ScrollLPosition		= Vector2.zero;
 			protected	bool			_blnSaveCtrlKey				= false;
 
 		#endregion
@@ -34,7 +35,7 @@ namespace CBT
 
 			protected						void			ListView()
 			{
-				_v2ScrollPosition = EditorGUILayout.BeginScrollView(_v2ScrollPosition, GUILayout.ExpandHeight(true), GUILayout.Width(MINIMUM_LIST_WIDTH));
+				_v2ScrollLPosition = EditorGUILayout.BeginScrollView(_v2ScrollLPosition, GUILayout.ExpandHeight(true), GUILayout.Width(MINIMUM_LIST_WIDTH));
 				DisplayList();
 				EditorGUILayout.EndScrollView();
 			}

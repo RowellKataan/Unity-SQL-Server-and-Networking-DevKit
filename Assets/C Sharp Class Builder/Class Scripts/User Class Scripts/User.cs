@@ -99,42 +99,42 @@ public class User : UserBase
 
 	#region "PUBLIC SEARCH FUNCTIONS"
 
-		public	static	User		FindByNetID(int intFind)
+		public	new	static	User		FindByNetID(int intFind)
 		{
 			if (UserManager.Instance != null)
 				return UserManager.Instance.Users.Find(x => x.NetID == intFind);
 			else
 				return null;
 		}
-		public	static	User		FindByID(int _intFind)
+		public	new	static	User		FindByID(int _intFind)
 		{
 			if (UserManager.Instance != null)
 				return UserManager.Instance.Users.Find(x => x.UserID == _intFind);
 			else
 				return null;
 		}
-		public	static	User		FindByUserID(int _intFind)
+		public	new	static	User		FindByUserID(int _intFind)
 		{
 			if (UserManager.Instance != null)
 				return UserManager.Instance.Users.Find(x => x.UserID == _intFind);
 			else
 				return null;
 		}
-		public	static	User		FindByUsername(string _strFind)
+		public	new	static	User		FindByUsername(string _strFind)
 		{
 			if (UserManager.Instance != null)
 				return UserManager.Instance.Users.Find(x => x.Username.ToLower() == _strFind.ToLower());
 			else
 				return null;
 		}
-		public	static	User		FindByEmailAddress(string _strFind)
+		public	new	static	User		FindByEmailAddress(string _strFind)
 		{
 			if (UserManager.Instance != null)
 				return UserManager.Instance.Users.Find(x => x.EmailAddress.ToLower() == _strFind.ToLower());
 			else
 				return null;
 		}
-		public	static	User		FindByUserType(UserTypes _enFind)
+		public	static	User				FindByUserType(UserTypes _enFind)
 		{
 			if (UserManager.Instance != null)
 				return UserManager.Instance.Users.Find(x => x.UserType == _enFind);

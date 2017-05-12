@@ -12,9 +12,7 @@
 using UnityEditor;
 #endif
 using UnityEngine;
-using UnityEngine.UI;
 using System.Linq;
-using System.Collections;
 using System.Collections.Generic;
 
 namespace CBT
@@ -28,20 +26,23 @@ namespace CBT
 		{
 			[SerializeField]	public	int					Index					= 0;
 			[SerializeField]	public	string			Name					= "";
+			[SerializeField]	public	int					IntValue			= -1;
 			[SerializeField]	public	bool				IsDeleted			= false;	
 
-			public						EnumProperty(string strName = "")
+			public						EnumProperty(string strName = "", int newValue = -1)
 			{
 				Index			= 0;
 				Name			= strName;
+				IntValue	= newValue;
 				IsDeleted = false;
 			}
 			public	string		Serialize()
 			{
 				string strOut = "";
 
-				strOut += Index.ToString() + "^";
-				strOut += Name.ToString() + "^";
+				strOut += Index.ToString()		+ "^";
+				strOut += Name.ToString()			+ "^";
+				strOut += IntValue.ToString()	+ "^";
 				strOut += Util.ConvertToInt(IsDeleted).ToString();
 
 				return strOut;
@@ -52,7 +53,8 @@ namespace CBT
 
 					Index			=	Util.ConvertToInt(strSpl[0]);
 					Name			= strSpl[1];
-					IsDeleted	= Util.ConvertToBoolean(strSpl[2]);
+					IntValue	=	Util.ConvertToInt(strSpl[2]);
+					IsDeleted	= Util.ConvertToBoolean(strSpl[3]);
 			}
 		}
 
@@ -68,7 +70,7 @@ namespace CBT
 
 			// CLASS VARIABLES -- USED BY SYSTEM
 			[SerializeField]	private	int					_intID								= 0;				
-			[SerializeField]	private int					_intIndex							= -1;				
+			[SerializeField]	private int					_intIndex							= -1;
 			[SerializeField]	private bool				_blnIsActive					= true;		
 
 			// CLASS VARIABLES -- SET BY USER
@@ -250,17 +252,33 @@ namespace CBT
 			}
 			public	void				AddProperty(EnumProperty prop)
 			{
+				// DETERMINE IF THE INTVALUE ALREADY EXISTS UNDER A DIFFERENT ENUM NAME
+				int i = Variables.FindIndex(x => x.IntValue == prop.IntValue && x.Name.ToLower() != prop.Name.ToLower());
+				if (i >= 0)
+				{
+					Debug.LogError("The IntValue (" + prop.IntValue.ToString() + ") already exists for Enum (" + Variables[i].Name + ").");
+					return;
+				}
+
 				// DETERMINE INDEX
 				int intIndex = 0;
 				if (Variables.Count > 0)
-					intIndex = Variables.Max(x => x.Index) + 1;
+						intIndex = Variables.Max(x => x.Index) + 1;
 
 				// REMOVE PROPERTY IF THE NAME ALREADY EXISTS, AND IT IS DELETED
-				int i = Variables.FindIndex(x => x.Name.ToLower() == prop.Name.ToLower() && x.IsDeleted);
+				i = Variables.FindIndex(x => x.Name.ToLower() == prop.Name.ToLower() );		// && x.IsDeleted
 				if (i >= 0)
-				{ 
+				{
+					if (prop.IntValue < 0)
+							prop.IntValue = Variables[i].IntValue; 
 					Variables.RemoveAt(i);
 					intIndex = i;
+				} else {
+					if (prop.IntValue < 0)
+					{
+						try {  i = Variables.Max(x => x.IntValue) + 1; } catch { i = 0; }
+						prop.IntValue = i;
+					}
 				}
 
 				// ADD THE PROPERTY TO THE LIST
@@ -272,7 +290,7 @@ namespace CBT
 			{
 				_strEnumName					= "";
 				_vars = new List<EnumProperty>();
-				_vars.Add(new EnumProperty("NONE"));
+				_vars.Add(new EnumProperty("NONE", 0));
 				_blnInitialized = true;
 			}
 			public	void				ResetVariables()
@@ -282,7 +300,7 @@ namespace CBT
 
 				// INIT THE VAR LIST
 				_vars = new List<EnumProperty>();
-				_vars.Add(new EnumProperty("NONE"));
+				_vars.Add(new EnumProperty("NONE", 0));
 
 				// SET CLASS AS INITIALIZED
 				_blnInitialized = true;

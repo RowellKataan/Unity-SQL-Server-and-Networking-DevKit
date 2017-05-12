@@ -1,0 +1,13 @@
+// THIS IS A SAMPLE OF AN OVERRIDE TEXT 
+// FILE TO DETERMINE THE SQL SERVER TO CONNECT TO
+
+server=localhost
+database=UnityDatabase
+username=UnityUser
+password=abcABC123!@#
+
+retries=10
+cmdcount=10
+charcount=2500
+savedelay=0
+

@@ -10,7 +10,6 @@
 
 using UnityEngine;
 using UnityEditor;
-using System.Collections;
 using System.Text.RegularExpressions;
 
 namespace CBT
@@ -46,9 +45,11 @@ namespace CBT
 			[System.NonSerialized]
 			private		bool						_blnSyncVar						= false;
 			[System.NonSerialized]
+			private		bool						_blnIsName						= false;
+			[System.NonSerialized]
 			private		int							_intSelected					= 0;
 			[System.NonSerialized]
-			private		string[]				TypeArray							= { "int", "string", "bool", "float", "enum", "DateTime", "Vector2", "Vector3", "Quaternion" };
+			private		string[]				TypeArray							= { "int", "string", "bool", "float", "enum", "DateTime", "Vector2", "Vector3", "Quaternion", "Sprite", "Color" };
 
 			[System.NonSerialized]
 			private		string					strTemp								= "";
@@ -66,20 +67,6 @@ namespace CBT
 			private		Vector4					v4Temp								= Vector4.zero;
 			[System.NonSerialized]
 			private		string					dtTemp								= "";
-
-
-			[System.NonSerialized]
-			private		BaseDatabase<EnumBuilder>	_dbEnums		= null;
-			[System.NonSerialized]
-			private		string[]				_strEnumList					= null;
-			[System.NonSerialized]
-			private		string[]				_strEnumDefList				= null;
-			[System.NonSerialized]
-			private		int							_intSelectedEnum			= -1;
-
-
-			[System.NonSerialized]
-			private		Vector2					_v2ScrollPosition;
 
 		#endregion
 
@@ -120,101 +107,7 @@ namespace CBT
 
 		#endregion
 
-		#region "PRIVATE PROPERTIES"
-
-			private		BaseDatabase<EnumBuilder>		DBenums
-			{
-				get
-				{
-					if (_dbEnums == null)
-							_dbEnums = EnumBuilder.LoadDatabase();
-					return _dbEnums;
-				}
-			}
-			private		string[]										EnumArray
-			{
-				get
-				{
-					if (_strEnumList == null)
-							_strEnumList = CreateEnumPopUpList(DBenums);
-					return _strEnumList;
-				}
-			}
-			private		string[]										EnumDefaultArray
-			{
-				get
-				{
-					return _strEnumDefList;
-				}
-			}
-
-		#endregion
-
 		#region "PRIVATE FUNCTIONS"
-
-			private int														GetIndex(string[] strArray, string strSelected)
-			{
-				for (int i = 0; i < strArray.Length; i++)
-				{
-					if (strSelected == strArray[i])
-						return i;
-				}
-				return 0;
-			}
-			private string[]											CreateEnumPopUpList(BaseDatabase<EnumBuilder>	db, bool blnIncludeAll = false, bool blnIncludeNone = false)
-			{
-				if (db == null || db.Count < 1)
-					if (blnIncludeAll)
-						return new string[] { "-- All -- "};
-					else
-						return new string[] {  };
-
-				string[] st = new string[] { };
-
-				if (blnIncludeAll)
-				{
-					st = new string[db.Count + 1];
-					st[0] = "-- All --";
-					for (int i = 0; i < db.Count; i++)
-					{
-						st[i + 1] = db.database[i].Name;
-					}
-				} else if (blnIncludeAll)
-				{
-					st = new string[db.Count + 1];
-					st[0] = "-- None --";
-					for (int i = 0; i < db.Count; i++)
-					{
-						st[i + 1] = db.database[i].Name;
-					}
-				} else {
-					st = new string[db.Count];
-					for (int i = 0; i < db.Count; i++)
-					{
-						st[i] = db.database[i].Name;
-					}
-				}
-
-				return st;
-			}
-			private string[]											CreateEnumDefaultPopUpList(BaseDatabase<EnumBuilder>	db, int intField)
-			{
-				if (db == null || db.Count < 1)
-					return new string[] { };
-
-				if (intField < 0 || intField > db.Count - 1)
-					return new string[] { };
-
-				string[] st = new string[] { };
-
-				st = new string[db.database[intField].Variables.Count];
-				for (int i = 0; i < db.database[intField].Variables.Count; i++)
-				{
-					st[i] = db.database[intField].Variables[i].Name;
-				}
-
-				return st;
-			}
 
 			private							void							DisplayEditorCommands()
 			{
@@ -245,7 +138,7 @@ namespace CBT
 																	 "then be found in the Directory below.");
 				EditorGUILayout.Separator();
 
-				_v2ScrollPosition = EditorGUILayout.BeginScrollView(_v2ScrollPosition, GUILayout.ExpandHeight(true));
+				_v2ScrollEPosition = EditorGUILayout.BeginScrollView(_v2ScrollEPosition, GUILayout.ExpandHeight(true));
 
 
 				// CLASS NAME AND NAMESPACE
@@ -271,24 +164,35 @@ namespace CBT
 					EditorGUILayout.BeginHorizontal();
 					EditorGUILayout.BeginVertical();
 
-					theObject.UseUnity							= EditorGUILayout.Toggle("Uses Unity",											theObject.UseUnity,			GUILayout.Width(200));
+					theObject.UseUnity							= EditorGUILayout.Toggle("Uses Unity",											theObject.UseUnity,						GUILayout.Width(200));
 					if (theObject.UseUnity)
 					{
-						theObject.UseUnityUI					= EditorGUILayout.Toggle("-- Uses Unity UI",							theObject.UseUnityUI,		GUILayout.Width(200));
-						theObject.IsANetworkObject		= EditorGUILayout.Toggle("-- Is Networked Object",				theObject.IsANetworkObject,	GUILayout.Width(200));
+						theObject.UseUnityUI					= EditorGUILayout.Toggle("-- Uses Unity UI",							theObject.UseUnityUI,						GUILayout.Width(200));
+						if (!theObject.UseUnityUI)
+							theObject.UseUnityDatabase	= false;
+						theObject.IsANetworkObject		= EditorGUILayout.Toggle("-- Is Networked Object",				theObject.IsANetworkObject,			GUILayout.Width(200));
 						if (theObject.IsANetworkObject)
-						theObject.HasNetworkTransform	= EditorGUILayout.Toggle("-- Has Net Transform",					theObject.HasNetworkTransform, GUILayout.Width(200));
+							theObject.HasNetworkTransform	= EditorGUILayout.Toggle("-- Has Net Transform",					theObject.HasNetworkTransform, GUILayout.Width(200));
 						else
-						theObject.HasNetworkTransform = false;
-						theObject.UseEditor						= EditorGUILayout.Toggle("-- Create Inspector",						theObject.UseEditor,		GUILayout.Width(200));
-						theObject.UseClassMgr					= EditorGUILayout.Toggle("-- Create Class Manager",				theObject.UseClassMgr,	GUILayout.Width(200));
+							theObject.HasNetworkTransform = false;
+						if (!theObject.UseUnityDatabase)
+						{
+							theObject.UseEditor						= EditorGUILayout.Toggle("-- Create Inspector",						theObject.UseEditor,		GUILayout.Width(200));
+							theObject.UseClassMgr					= EditorGUILayout.Toggle("-- Create Class Manager",				theObject.UseClassMgr,	GUILayout.Width(200));
+							if (theObject.UseEditor || theObject.UseClassMgr)
+								theObject.UseUnityDatabase = false;
+						}
 					} else { 
 						theObject.UseUnityUI					= false;
 						theObject.IsANetworkObject		= false;
 						theObject.HasNetworkTransform	= false;
 						theObject.UseEditor						= false;
+						theObject.UseClassMgr					= false;
+						theObject.UseUnityDatabase		= false;
 					}
 					theObject.UseSerialization			= EditorGUILayout.Toggle("-- Serializer/Deserializer",		theObject.UseSerialization, GUILayout.Width(200));
+					if (!theObject.UseSerialization)
+						theObject.UseUnityDatabase		= false;
 
 					if (theObject.UseUnity)
 					{
@@ -303,18 +207,34 @@ namespace CBT
 					EditorGUILayout.EndVertical();
 
 					EditorGUILayout.BeginVertical();
-					theObject.UseDatabase					= EditorGUILayout.Toggle("Uses SQL Database",							theObject.UseDatabase, GUILayout.Width(200));
+					if (theObject.UseUnity)
+					{
+						bool b		= EditorGUILayout.Toggle("Uses Unity Database",						theObject.UseUnityDatabase, GUILayout.Width(200));
+						if (b != theObject.UseUnityDatabase && b)
+						{
+							theObject.UseUnityDatabase	= true;
+							theObject.UseUnityUI				= true;
+							theObject.UseSerialization	= true;
+							theObject.UseSQLDatabase		= false;
+							theObject.UseEditor					= false;
+							theObject.UseClassMgr				= false;
+						}
+					}
+
+					theObject.UseSQLDatabase			= EditorGUILayout.Toggle("Uses SQL Database",							theObject.UseSQLDatabase, GUILayout.Width(200));
+					if (theObject.UseSQLDatabase)
+							theObject.UseUnityDatabase = false;
 			
 					if (theObject.UseUnity)
 					{ 
-						if (theObject.UseDatabase)
+						if (theObject.UseSQLDatabase)
 							theObject.UseDBmgr				= EditorGUILayout.Toggle("-- DatabaseManager?",						theObject.UseDBmgr, GUILayout.Width(200));
 						else
 							theObject.UseDBmgr				= false;
 					} else {
 						theObject.UseDBmgr					= false;
 					}
-					if (theObject.UseDatabase)
+					if (theObject.UseSQLDatabase)
 					{ 
 						theObject.UseDBload					= EditorGUILayout.Toggle("-- Handle Loads",								theObject.UseDBload, GUILayout.MinWidth(200));
 						theObject.UseDBsave					= EditorGUILayout.Toggle("-- Handle Saves",								theObject.UseDBsave, GUILayout.MinWidth(200));
@@ -324,7 +244,7 @@ namespace CBT
 					}
 					EditorGUILayout.Separator();
 
-					if (!theObject.UseDBmgr && theObject.UseDatabase)
+					if (!theObject.UseDBmgr && theObject.UseSQLDatabase)
 					{
 						EditorGUILayout.LabelField("MS-SQL SERVER SET UP");
 						theObject.DBserver					= EditorGUILayout.TextField("Server",											theObject.DBserver);
@@ -406,20 +326,20 @@ namespace CBT
 					EditorStyles.label.stretchWidth = true;
 					switch (_intSelected)
 					{
-						case 1:		// "string":
-							string s = EditorGUILayout.TextField("", strTemp, GUILayout.Width(150));
-							if (s != strTemp)
-							{
-								_strStart = s.ToString();
-								strTemp = s;
-							}
-							break;
 						case 0:		// "int":
 							int x = EditorGUILayout.IntField("", intTemp, GUILayout.Width(150));
 							if (x != intTemp)
 							{
 								_strStart = x.ToString();
 								intTemp = x;
+							}
+							break;
+						case 1:		// "string":
+							string s = EditorGUILayout.TextField("", strTemp, GUILayout.Width(150));
+							if (s != strTemp)
+							{
+								_strStart = s.ToString();
+								strTemp = s;
 							}
 							break;
 						case 2:		// "bool":
@@ -444,7 +364,7 @@ namespace CBT
 							{
 								_strNewType = "enum" + EnumArray[iEnum];
 								_intSelectedEnum = iEnum;
-								_strEnumDefList = CreateEnumDefaultPopUpList(DBenums, iEnum);
+								_strEnumDefList = CreateEnumDefaultPopUpListByID(DBenums, iEnum);
 							}
 							if (_intSelectedEnum >= 0 && EnumDefaultArray != null && EnumDefaultArray.Length > 0)
 							{ 
@@ -505,6 +425,8 @@ namespace CBT
 								v4Temp = v4;
 							}
 							break;
+						case 9:		// "sprite"
+							break;
 					}
 					EditorGUILayout.EndVertical();
 
@@ -515,7 +437,7 @@ namespace CBT
 					EditorGUILayout.LabelField("<color=yellow>Can\nFind</color>", GUILayout.Width(40), GUILayout.Height(32));
 					EditorStyles.label.richText = false;
 					EditorStyles.label.stretchWidth = true;
-					_blnNewFind					= EditorGUILayout.Toggle(	"", _blnNewFind, GUILayout.Width(40));
+					_blnNewFind					= EditorGUILayout.Toggle(	"", _blnNewFind, GUILayout.Width(40)) && !(_intSelected==9);
 					EditorGUILayout.EndVertical();
 
 					// ---- IS NETWORKED OBJECT -- SYNCVAR
@@ -527,9 +449,24 @@ namespace CBT
 					EditorGUILayout.LabelField("<color=yellow>Sync\nVar</color>", GUILayout.Width(40), GUILayout.Height(32));
 					EditorStyles.label.richText = false;
 					EditorStyles.label.stretchWidth = true;
-					_blnSyncVar					= EditorGUILayout.Toggle(	"", _blnSyncVar, GUILayout.Width(40));
+					_blnSyncVar					= EditorGUILayout.Toggle(	"", _blnSyncVar, GUILayout.Width(40)) && !(_intSelected==9);
 					EditorGUILayout.EndVertical();
 					}
+
+					// ---- IS NAME OF THE OBJECT
+					EditorGUILayout.BeginVertical();
+					EditorStyles.label.richText = true;
+					EditorStyles.label.stretchWidth = false;
+					EditorGUILayout.LabelField("<color=yellow>Obj\nName</color>", GUILayout.Width(40), GUILayout.Height(32));
+					EditorStyles.label.richText = false;
+					EditorStyles.label.stretchWidth = true;
+					if (theObject.HasNamedVariable)
+					{
+						_blnIsName = false;
+						EditorGUILayout.Toggle(	"", false, GUILayout.Width(40));
+					} else 
+						_blnIsName					= EditorGUILayout.Toggle(	"", _blnIsName, GUILayout.Width(40)) && !(_intSelected==9);
+					EditorGUILayout.EndVertical();
 
 					// ---- ADD BUTTON
 					EditorGUILayout.BeginVertical();
@@ -561,6 +498,7 @@ namespace CBT
 						prop.StartingValue	= _strStart;
 						prop.IsSearchable		= _blnNewFind;
 						prop.IsSynchVar			= _blnSyncVar;
+						prop.IsNameVar			= _blnIsName;
 						if (blnVariableExists)
 							theObject.Variables[intVariableExists].Deserialize(prop.Serialize());
 						else
@@ -605,6 +543,7 @@ namespace CBT
 					EditorGUILayout.LabelField("<color=yellow>Can\nFind</color>",				GUILayout.Width(40),	GUILayout.Height(32));
 					if (theObject.IsANetworkObject)
 					EditorGUILayout.LabelField("<color=yellow>Sync\nVar</color>",				GUILayout.Width(40),	GUILayout.Height(32));
+					EditorGUILayout.LabelField("<color=yellow>Obj\nName</color>",				GUILayout.Width(40),	GUILayout.Height(32));
 					EditorGUILayout.LabelField("\n<color=yellow>Default Value</color>",	GUILayout.Width(125),	GUILayout.Height(32));
 					EditorStyles.label.richText = false;
 					EditorStyles.label.stretchWidth = true;
@@ -639,20 +578,26 @@ namespace CBT
 							if (theObject.Variables[i].VarType.ToLower().StartsWith("enum"))
 								EditorGUILayout.LabelField(theObject.Variables[i].VarType.Substring(4), GUILayout.Width(75));
 							else
-							EditorGUILayout.LabelField(theObject.Variables[i].VarType,				GUILayout.Width(75));
+								EditorGUILayout.LabelField(theObject.Variables[i].VarType,							GUILayout.Width(75));
+
 							if (theObject.Variables[i].VarType.ToLower() == "string")
 								EditorGUILayout.LabelField(theObject.Variables[i].MaxLength.ToString(), GUILayout.Width(40));
 							else
 								EditorGUILayout.LabelField("", GUILayout.Width(40));
-							EditorGUILayout.Toggle(theObject.Variables[i].IsSearchable, GUILayout.Width(40));
+
+							EditorGUILayout.Toggle(theObject.Variables[i].IsSearchable,								GUILayout.Width(40));
+
 							if (theObject.IsANetworkObject)
-								EditorGUILayout.Toggle(theObject.Variables[i].IsSynchVar, GUILayout.Width(40));
+								EditorGUILayout.Toggle(theObject.Variables[i].IsSynchVar,								GUILayout.Width(40));
+
+							EditorGUILayout.Toggle(theObject.Variables[i].IsNameVar,									GUILayout.Width(40));
+
 							if (theObject.Variables[i].VarType.ToLower().StartsWith("enum"))
 							{
 								string sV = theObject.Variables[i].VarType.Substring(4).ToLower();
 								int w = DBenums.database.FindIndex(x => x.Name.ToLower() == sV);
 								if (w >= 0)
-								EditorGUILayout.LabelField(CreateEnumDefaultPopUpList(DBenums, w)[Util.ConvertToInt(theObject.Variables[i].StartingValue)],	GUILayout.Width(125));
+								EditorGUILayout.LabelField(CreateEnumDefaultPopUpListByID(DBenums, w)[Util.ConvertToInt(theObject.Variables[i].StartingValue)],	GUILayout.Width(125));
 							} else
 								EditorGUILayout.LabelField(theObject.Variables[i].StartingValue, GUILayout.Width(125));
 
@@ -673,7 +618,7 @@ namespace CBT
 					if (Application.isPlaying && false)
 					{ 
 						EditorGUILayout.Space();
-						if (theObject.UseDatabase && theObject.Variables.Count > 0 && GUILayout.Button("MODIFY DATABASE"))
+						if (theObject.UseSQLDatabase && theObject.Variables.Count > 0 && GUILayout.Button("MODIFY DATABASE"))
 						{ 
 							_blnNote = theObject.CreateSQLscriptsIntoSQLdatabase();
 						}

@@ -13,7 +13,6 @@ using UnityEditor;
 #endif
 using UnityEngine;
 using System.Linq;
-using System.Collections;
 using System.Collections.Generic;
 
 namespace CBT
@@ -29,10 +28,6 @@ namespace CBT
 
 			[System.NonSerialized]	
 			private		bool		_blnDatabaseLoaded	= false;
-			[System.NonSerialized]	
-			private		string	_strDBpath					= "";
-			[System.NonSerialized]	
-			private		string	_strDBname					= "";
 
 		#endregion
 

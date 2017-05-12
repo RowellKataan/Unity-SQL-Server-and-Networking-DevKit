@@ -63,7 +63,7 @@ public class LoadingPanel : MonoBehaviour
 		private IEnumerator			StartConnection()
 		{
 			int i = 0;
-			ConnectionProgressBar.Progress = 0;
+			ConnectionProgressBar.SetProgress(0, 100);
 			ConnectionProgressBar.Caption = "Loading...";
 			Util.Timer connClock = new Util.Timer();
 			connClock.StartTimer();

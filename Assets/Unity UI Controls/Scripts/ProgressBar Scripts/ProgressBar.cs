@@ -41,6 +41,10 @@ public class ProgressBar : MonoBehaviour
 		private Color						_colTextShadow				= Color.black;
 		[SerializeField]
 		private Color						_colBarColor					= Color.cyan;
+		[SerializeField]
+		private bool						_blnDisplayAsPercent	= true;
+
+		private bool						_blnIsInitialized			= false;
 
 	#endregion
 
@@ -120,7 +124,10 @@ public class ProgressBar : MonoBehaviour
 				Vector2 v = ProgressBarLine.GetComponent<RectTransform>().sizeDelta;
 				v.x = ProgressWidth * f;
 				ProgressBarLine.GetComponent<RectTransform>().sizeDelta = v;
-				ProgressText.GetComponent<Text>().text = _fCurValue.ToString("##0") + "%";
+				if (_blnDisplayAsPercent)
+					ProgressText.GetComponent<Text>().text = (f * 100).ToString("##0") + "%";
+				else
+					ProgressText.GetComponent<Text>().text = _fCurValue.ToString() + " / " + _fMaxValue.ToString();
 			}
 		}
 		public	float						CurValue
@@ -147,6 +154,17 @@ public class ProgressBar : MonoBehaviour
 			}
 		}
 
+		public	bool						DisplayAsPercent
+		{
+			get
+			{
+				return _blnDisplayAsPercent;
+			}
+			set
+			{
+				_blnDisplayAsPercent = value;
+			}
+		}
 		public	Color						TextColor
 		{
 			get
@@ -199,6 +217,15 @@ public class ProgressBar : MonoBehaviour
 			ProgressBarColor	= _colBarColor;
 			TextColor					= _colTextColor;
 			TextShadow				= _colTextShadow;
+			Progress					= _fCurValue;
+			_blnIsInitialized = true;
+		}
+		private void						OnEnable()
+		{
+			if (!_blnIsInitialized)
+				Start();
+			else 
+				Progress = _fCurValue;
 		}
 
 	#endregion

@@ -10,7 +10,6 @@
 
 using UnityEngine;
 using UnityEditor;
-using System.Collections;
 using System.Text.RegularExpressions;
 
 namespace CBT
@@ -21,8 +20,6 @@ namespace CBT
 
 		#region "PRIVATE/PROTECTED CONSTANTS"
 
-			protected const			int			MINIMUM_WIDTH						= 600;
-			protected const			int			MINIMUM_HEIGHT					= 400;
 			private 	const			string	WINDOW_TITLE						= "Enum Builder";
 			private		const			string	MENU_NAME								= "Tools/Enum Builder";
 			private		const			string	dDATABASE_FILE_NAME			= @"EnumDatabase.asset";	
@@ -31,18 +28,15 @@ namespace CBT
 
 		#region "PRIVATE VARIABLES"
 
-			private		int							_intSelectedEnum	= -1;
-
 			[System.NonSerialized]
 			private		string					_strNewName				= "";
 			[System.NonSerialized]
 			private		string					_strNewVar				=	"";
-
+			[System.NonSerialized]
+			private		int							_intNewValue			= -1;
 
 			[System.NonSerialized]
 			private		int							_intSelected			= 0;
-			[System.NonSerialized]
-			private		Vector2					_v2ScrollPosition;
 
 		#endregion
 
@@ -85,15 +79,6 @@ namespace CBT
 
 		#region "PRIVATE FUNCTIONS"
 
-			private		int													GetIndex(string[] strArray, string strSelected)
-			{
-				for (int i = 0; i < strArray.Length; i++)
-				{
-					if (strSelected == strArray[i])
-						return i;
-				}
-				return 0;
-			}
 			protected	bool												EnumExistsInClass(string strVar)
 			{
 				BaseDatabase<ClassBuilder> cb = ClassBuilder.LoadDatabase();
@@ -131,7 +116,7 @@ namespace CBT
 				EditorGUILayout.LabelField("This Control allows you to create custom enums.");
 				EditorGUILayout.Separator();
 
-				_v2ScrollPosition = EditorGUILayout.BeginScrollView(_v2ScrollPosition, GUILayout.ExpandHeight(true));
+				_v2ScrollEPosition = EditorGUILayout.BeginScrollView(_v2ScrollEPosition, GUILayout.ExpandHeight(true));
 
 				if (!theObject.IsInitialized && theObject.Name != "" && GUILayout.Button("INITIALIZE ENUM"))
 						theObject.ResetVariables();
@@ -157,23 +142,29 @@ namespace CBT
 					EditorGUILayout.LabelField("ADD ENUM MEMBER");
 					EditorStyles.label.fontStyle = FontStyle.Normal;
 
-					EditorGUILayout.BeginHorizontal();
+					EditorGUILayout.BeginVertical();
 
 					// ---- FIELD NAME
 					_strNewVar = EditorGUILayout.TextField("Member Name: ", _strNewVar);
 					_strNewVar = Regex.Replace(_strNewVar, @"[^a-zA-Z0-9_]", "");
+
+					// ---- INT VALUE (IF APPLICABLE)
+					_intNewValue = EditorGUILayout.IntField("Int Value: ", _intNewValue);
+												 EditorGUILayout.LabelField(" ", "(-1 = auto-numbering)");
 
 					// ---- ADD BUTTON
 					if (GUILayout.Button("ADD", GUILayout.Width(75)))
 					{
 						EnumBuilder.EnumProperty prop = new EnumBuilder.EnumProperty();
 						prop.Name						= _strNewVar;
+						prop.IntValue				= _intNewValue;
 						theObject.AddProperty(prop);
 						_strNewVar					= "";
+						_intNewValue				= -1;
 						_intSelected				= -1;
 						GUI.FocusControl(null);
 					}
-					EditorGUILayout.EndHorizontal();
+					EditorGUILayout.EndVertical();
 					EditorGUILayout.Separator();
 					EditorGUILayout.Space();
 			
@@ -197,7 +188,8 @@ namespace CBT
 								if (EditorUtility.DisplayDialog("Delete this Item?", "Are you sure that you want to delete \"" + theObject.Variables[i].Name + "\"?", "Delete", "Cancel"))
 									theObject.Variables[i].IsDeleted = true;
 
-							EditorGUILayout.LabelField(theObject.Variables[i].Name);
+							EditorGUILayout.LabelField(theObject.Variables[i].Name, GUILayout.Width(150));
+							EditorGUILayout.LabelField(theObject.Variables[i].IntValue.ToString(), GUILayout.Width(30));
 
 							EditorGUILayout.EndHorizontal();
 						}
@@ -241,7 +233,7 @@ namespace CBT
 
 				GUILayout.Label("Record Count: " + ((BaseDatabase<EnumBuilder>)(object)editorDB).Count.ToString() + " - (Hold CTRL to Delete a Record)");
 				if (selected == null && GUILayout.Button("Add New"))
-					selected = (EnumBuilder)(object)new EnumBuilder();
+						selected = (EnumBuilder)(object)new EnumBuilder();
 
 				GUILayout.EndHorizontal();
 			}
